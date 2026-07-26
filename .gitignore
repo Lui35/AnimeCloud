@@ -1,0 +1,10 @@
+.DS_Store
+DerivedData/
+build/
+*.xcuserstate
+xcuserdata/
+*.ipa
+*.dSYM
+*.dSYM.zip
+*.mobileprovision
+analysis/extracted/

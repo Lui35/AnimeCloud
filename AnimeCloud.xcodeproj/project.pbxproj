@@ -1,0 +1,619 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		09ACF3D4C47DF724046E24F0 /* LaunchExperienceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC10E1E0A5A321C51718CE97 /* LaunchExperienceView.swift */; };
+		121FD4A7306ABFBAFF2BBE6A /* GroundedDiscoveryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AD837FD36D33171A3C1BF87 /* GroundedDiscoveryService.swift */; };
+		1963D35D0502097929B0A39E /* AnimeCloudTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DB67BB9EB8DAF4FD1C68540 /* AnimeCloudTests.swift */; };
+		3EE7F73324406D2FD871F007 /* AnimeDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5906E360EBCFC5AF86993361 /* AnimeDetailView.swift */; };
+		42475837307BB4ACADB3B50B /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2422096CD942F6DB97F00B3A /* Models.swift */; };
+		4A126A7B3F58B4B0C4A1FEDE /* DiscoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8531B8C59D300652FDE9567B /* DiscoverView.swift */; };
+		4B905ADE12E1496C7CE2B931 /* LibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 537D4BE60471483468FF3D27 /* LibraryStore.swift */; };
+		62535061A530AFAC99182D61 /* AnimeCloudApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8017B8CE5B3DF8BE3075471A /* AnimeCloudApp.swift */; };
+		7F6C4D930A6F9BD89E1F62CE /* ScheduleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 551D83A5E1DE2489310F0230 /* ScheduleView.swift */; };
+		835CC8D7DE43AE435307B2B8 /* PosterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C230C5F7B2FF684AEB02DAEF /* PosterView.swift */; };
+		89F5C0252CD63B15CF4077DB /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C302B66ADBB01005C16AB043 /* ProfileView.swift */; };
+		9640A64FB91AD72D065CAB27 /* RNCryptorPlaybackDecryptor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1670222E8A7E5CF603C0A0E /* RNCryptorPlaybackDecryptor.swift */; };
+		96419F1BF40F84C6414FEE2B /* DiscoveryAssistantView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F55B0CE206B3F38661D4C2C /* DiscoveryAssistantView.swift */; };
+		A06CBECDDDE20926E4BF6CC2 /* PlaybackProgressStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CF7195AF672B77A146E76DD /* PlaybackProgressStore.swift */; };
+		A63C0D95FB0E38E54FC11AB0 /* LibrarySaveMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7171E5903EE32DB865A5D2E7 /* LibrarySaveMenu.swift */; };
+		AB12AE618C343E9C6DF09647 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B729A9602F5795490F17E1F7 /* LibraryView.swift */; };
+		B6675066E24D51F9555CA7BA /* CloudTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4279235A7B1620766FD11AFD /* CloudTheme.swift */; };
+		BF46C3E211BA5BEB2A88E1E1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B4AFE7B69E69E3D607416C79 /* Assets.xcassets */; };
+		C48097498D9BA9498A6D62F1 /* LegacyAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB3B4E176151881D81A6D604 /* LegacyAPI.swift */; };
+		C996D966B7D107F61FB958B5 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A37F37836E5A0D68FC629906 /* RootView.swift */; };
+		D6350A2EA39312612B000982 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 568D760F6FE9B42DF3E658CE /* HomeView.swift */; };
+		E22DD67D1E46DD70B229F288 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A62F0B570C69CF141C369ED0 /* AppModel.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		8169192D9FDFF45A576CF8E2 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = FECFF95283CDC11E5902C746 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 648FA59D9AA9D880C6BC6381;
+			remoteInfo = AnimeCloud;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		0AD837FD36D33171A3C1BF87 /* GroundedDiscoveryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroundedDiscoveryService.swift; sourceTree = "<group>"; };
+		0DB67BB9EB8DAF4FD1C68540 /* AnimeCloudTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimeCloudTests.swift; sourceTree = "<group>"; };
+		23FC15825EC51D2C1601CD50 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		2422096CD942F6DB97F00B3A /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		3F55B0CE206B3F38661D4C2C /* DiscoveryAssistantView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryAssistantView.swift; sourceTree = "<group>"; };
+		4279235A7B1620766FD11AFD /* CloudTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudTheme.swift; sourceTree = "<group>"; };
+		537D4BE60471483468FF3D27 /* LibraryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryStore.swift; sourceTree = "<group>"; };
+		551D83A5E1DE2489310F0230 /* ScheduleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleView.swift; sourceTree = "<group>"; };
+		568D760F6FE9B42DF3E658CE /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		5906E360EBCFC5AF86993361 /* AnimeDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimeDetailView.swift; sourceTree = "<group>"; };
+		7171E5903EE32DB865A5D2E7 /* LibrarySaveMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySaveMenu.swift; sourceTree = "<group>"; };
+		7CF7195AF672B77A146E76DD /* PlaybackProgressStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackProgressStore.swift; sourceTree = "<group>"; };
+		8017B8CE5B3DF8BE3075471A /* AnimeCloudApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimeCloudApp.swift; sourceTree = "<group>"; };
+		8531B8C59D300652FDE9567B /* DiscoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverView.swift; sourceTree = "<group>"; };
+		A0E3F7F62D36558BAF2F88BD /* AnimeCloud.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AnimeCloud.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A37F37836E5A0D68FC629906 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		A62F0B570C69CF141C369ED0 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		AB3B4E176151881D81A6D604 /* LegacyAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyAPI.swift; sourceTree = "<group>"; };
+		B4AFE7B69E69E3D607416C79 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B729A9602F5795490F17E1F7 /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
+		BC10E1E0A5A321C51718CE97 /* LaunchExperienceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchExperienceView.swift; sourceTree = "<group>"; };
+		C0110E02442B6EDA2D078B28 /* AnimeCloudTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = AnimeCloudTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C230C5F7B2FF684AEB02DAEF /* PosterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PosterView.swift; sourceTree = "<group>"; };
+		C302B66ADBB01005C16AB043 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
+		CDD11B80AC2DB8CC72EA032A /* CryptoBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CryptoBridge.h; sourceTree = "<group>"; };
+		F1670222E8A7E5CF603C0A0E /* RNCryptorPlaybackDecryptor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RNCryptorPlaybackDecryptor.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		1D2095249972474DB5DEC17F /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				2422096CD942F6DB97F00B3A /* Models.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		27A959C2AE16C5E798CD7B0B /* AI */ = {
+			isa = PBXGroup;
+			children = (
+				0AD837FD36D33171A3C1BF87 /* GroundedDiscoveryService.swift */,
+			);
+			path = AI;
+			sourceTree = "<group>";
+		};
+		2810052121E085C09450C7E9 /* Discover */ = {
+			isa = PBXGroup;
+			children = (
+				8531B8C59D300652FDE9567B /* DiscoverView.swift */,
+				3F55B0CE206B3F38661D4C2C /* DiscoveryAssistantView.swift */,
+			);
+			path = Discover;
+			sourceTree = "<group>";
+		};
+		484FEB30C49E8BAF88B88161 /* Detail */ = {
+			isa = PBXGroup;
+			children = (
+				5906E360EBCFC5AF86993361 /* AnimeDetailView.swift */,
+			);
+			path = Detail;
+			sourceTree = "<group>";
+		};
+		5539030A4CC0A4623C3334C7 /* AnimeCloudTests */ = {
+			isa = PBXGroup;
+			children = (
+				0DB67BB9EB8DAF4FD1C68540 /* AnimeCloudTests.swift */,
+			);
+			path = AnimeCloudTests;
+			sourceTree = "<group>";
+		};
+		5C1BDABF6D9C9241C3E03D6F /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				B4AFE7B69E69E3D607416C79 /* Assets.xcassets */,
+				23FC15825EC51D2C1601CD50 /* Info.plist */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		7926FEBAFE3D2585C5AD14D7 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A0E3F7F62D36558BAF2F88BD /* AnimeCloud.app */,
+				C0110E02442B6EDA2D078B28 /* AnimeCloudTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		8530845BF6F7C7FD81980C0A /* Home */ = {
+			isa = PBXGroup;
+			children = (
+				568D760F6FE9B42DF3E658CE /* HomeView.swift */,
+			);
+			path = Home;
+			sourceTree = "<group>";
+		};
+		91D7D9125C91620FF551D99D /* Library */ = {
+			isa = PBXGroup;
+			children = (
+				B729A9602F5795490F17E1F7 /* LibraryView.swift */,
+			);
+			path = Library;
+			sourceTree = "<group>";
+		};
+		96054E0B0612B2BDDF48B143 /* Networking */ = {
+			isa = PBXGroup;
+			children = (
+				AB3B4E176151881D81A6D604 /* LegacyAPI.swift */,
+			);
+			path = Networking;
+			sourceTree = "<group>";
+		};
+		9CE447DE11DAA8C14C760634 = {
+			isa = PBXGroup;
+			children = (
+				BE7D4F51EDE75AA1F4CC600D /* AnimeCloud */,
+				5539030A4CC0A4623C3334C7 /* AnimeCloudTests */,
+				7926FEBAFE3D2585C5AD14D7 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A0F9BD058A47B6A625F7414B /* Schedule */ = {
+			isa = PBXGroup;
+			children = (
+				551D83A5E1DE2489310F0230 /* ScheduleView.swift */,
+			);
+			path = Schedule;
+			sourceTree = "<group>";
+		};
+		AB5C894FE34A142A54BF5D8B /* Design */ = {
+			isa = PBXGroup;
+			children = (
+				4279235A7B1620766FD11AFD /* CloudTheme.swift */,
+			);
+			path = Design;
+			sourceTree = "<group>";
+		};
+		BE7D4F51EDE75AA1F4CC600D /* AnimeCloud */ = {
+			isa = PBXGroup;
+			children = (
+				8017B8CE5B3DF8BE3075471A /* AnimeCloudApp.swift */,
+				A62F0B570C69CF141C369ED0 /* AppModel.swift */,
+				A37F37836E5A0D68FC629906 /* RootView.swift */,
+				27A959C2AE16C5E798CD7B0B /* AI */,
+				F385D60CB011ADBA654144CD /* Components */,
+				AB5C894FE34A142A54BF5D8B /* Design */,
+				E6561D81E97E5902E190E109 /* Features */,
+				E9480BDDB4C930A29C66D532 /* Infrastructure */,
+				1D2095249972474DB5DEC17F /* Models */,
+				96054E0B0612B2BDDF48B143 /* Networking */,
+				DA3F103ACF2335DD71C2D047 /* Persistence */,
+				5C1BDABF6D9C9241C3E03D6F /* Resources */,
+			);
+			path = AnimeCloud;
+			sourceTree = "<group>";
+		};
+		D41FBD362C4D227D7DEC3F23 /* Profile */ = {
+			isa = PBXGroup;
+			children = (
+				C302B66ADBB01005C16AB043 /* ProfileView.swift */,
+			);
+			path = Profile;
+			sourceTree = "<group>";
+		};
+		DA3F103ACF2335DD71C2D047 /* Persistence */ = {
+			isa = PBXGroup;
+			children = (
+				537D4BE60471483468FF3D27 /* LibraryStore.swift */,
+				7CF7195AF672B77A146E76DD /* PlaybackProgressStore.swift */,
+			);
+			path = Persistence;
+			sourceTree = "<group>";
+		};
+		E6561D81E97E5902E190E109 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				484FEB30C49E8BAF88B88161 /* Detail */,
+				2810052121E085C09450C7E9 /* Discover */,
+				8530845BF6F7C7FD81980C0A /* Home */,
+				91D7D9125C91620FF551D99D /* Library */,
+				D41FBD362C4D227D7DEC3F23 /* Profile */,
+				A0F9BD058A47B6A625F7414B /* Schedule */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		E9480BDDB4C930A29C66D532 /* Infrastructure */ = {
+			isa = PBXGroup;
+			children = (
+				CDD11B80AC2DB8CC72EA032A /* CryptoBridge.h */,
+				F1670222E8A7E5CF603C0A0E /* RNCryptorPlaybackDecryptor.swift */,
+			);
+			path = Infrastructure;
+			sourceTree = "<group>";
+		};
+		F385D60CB011ADBA654144CD /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				BC10E1E0A5A321C51718CE97 /* LaunchExperienceView.swift */,
+				7171E5903EE32DB865A5D2E7 /* LibrarySaveMenu.swift */,
+				C230C5F7B2FF684AEB02DAEF /* PosterView.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		38597109ADEB03F70B3ECEAB /* AnimeCloudTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 181E987227B447A4F17B5F03 /* Build configuration list for PBXNativeTarget "AnimeCloudTests" */;
+			buildPhases = (
+				AC64650D8630903A7CEA2613 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				156458E0C221D40176E2D629 /* PBXTargetDependency */,
+			);
+			name = AnimeCloudTests;
+			packageProductDependencies = (
+			);
+			productName = AnimeCloudTests;
+			productReference = C0110E02442B6EDA2D078B28 /* AnimeCloudTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		648FA59D9AA9D880C6BC6381 /* AnimeCloud */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FFDADE7B87F522E5D75B5F0F /* Build configuration list for PBXNativeTarget "AnimeCloud" */;
+			buildPhases = (
+				09BC186FEA1B04E53946485D /* Sources */,
+				E92BAD650B33C53126443BFB /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = AnimeCloud;
+			packageProductDependencies = (
+			);
+			productName = AnimeCloud;
+			productReference = A0E3F7F62D36558BAF2F88BD /* AnimeCloud.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		FECFF95283CDC11E5902C746 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					38597109ADEB03F70B3ECEAB = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+					648FA59D9AA9D880C6BC6381 = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 0981870EACAE46C3E9A70024 /* Build configuration list for PBXProject "AnimeCloud" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 9CE447DE11DAA8C14C760634;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 7926FEBAFE3D2585C5AD14D7 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				648FA59D9AA9D880C6BC6381 /* AnimeCloud */,
+				38597109ADEB03F70B3ECEAB /* AnimeCloudTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		E92BAD650B33C53126443BFB /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BF46C3E211BA5BEB2A88E1E1 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		09BC186FEA1B04E53946485D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				62535061A530AFAC99182D61 /* AnimeCloudApp.swift in Sources */,
+				3EE7F73324406D2FD871F007 /* AnimeDetailView.swift in Sources */,
+				E22DD67D1E46DD70B229F288 /* AppModel.swift in Sources */,
+				B6675066E24D51F9555CA7BA /* CloudTheme.swift in Sources */,
+				4A126A7B3F58B4B0C4A1FEDE /* DiscoverView.swift in Sources */,
+				96419F1BF40F84C6414FEE2B /* DiscoveryAssistantView.swift in Sources */,
+				121FD4A7306ABFBAFF2BBE6A /* GroundedDiscoveryService.swift in Sources */,
+				D6350A2EA39312612B000982 /* HomeView.swift in Sources */,
+				09ACF3D4C47DF724046E24F0 /* LaunchExperienceView.swift in Sources */,
+				C48097498D9BA9498A6D62F1 /* LegacyAPI.swift in Sources */,
+				A63C0D95FB0E38E54FC11AB0 /* LibrarySaveMenu.swift in Sources */,
+				4B905ADE12E1496C7CE2B931 /* LibraryStore.swift in Sources */,
+				AB12AE618C343E9C6DF09647 /* LibraryView.swift in Sources */,
+				42475837307BB4ACADB3B50B /* Models.swift in Sources */,
+				A06CBECDDDE20926E4BF6CC2 /* PlaybackProgressStore.swift in Sources */,
+				835CC8D7DE43AE435307B2B8 /* PosterView.swift in Sources */,
+				89F5C0252CD63B15CF4077DB /* ProfileView.swift in Sources */,
+				9640A64FB91AD72D065CAB27 /* RNCryptorPlaybackDecryptor.swift in Sources */,
+				C996D966B7D107F61FB958B5 /* RootView.swift in Sources */,
+				7F6C4D930A6F9BD89E1F62CE /* ScheduleView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AC64650D8630903A7CEA2613 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1963D35D0502097929B0A39E /* AnimeCloudTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		156458E0C221D40176E2D629 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 648FA59D9AA9D880C6BC6381 /* AnimeCloud */;
+			targetProxy = 8169192D9FDFF45A576CF8E2 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		27B741F22BB1DCA535E7E768 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		3C1596F289F9E2066560E68B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.animecloud.reborn.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AnimeCloud.app/AnimeCloud";
+			};
+			name = Debug;
+		};
+		494DCB6B7213DF5B12CDE375 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = WWJ39PU569;
+				INFOPLIST_FILE = AnimeCloud/Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				OTHER_LDFLAGS = "-lsqlite3";
+				PRODUCT_BUNDLE_IDENTIFIER = com.animecloud.reborn;
+				PRODUCT_MODULE_NAME = AnimeCloud;
+				PRODUCT_NAME = AnimeCloud;
+				SDKROOT = iphoneos;
+				SWIFT_OBJC_BRIDGING_HEADER = AnimeCloud/Infrastructure/CryptoBridge.h;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		9E72DF5CC1D4A9F08D6CDCBF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		B3B4555C8F5F0E2B8F036048 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.animecloud.reborn.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AnimeCloud.app/AnimeCloud";
+			};
+			name = Release;
+		};
+		EAF6A513831707A0F1E385DC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = WWJ39PU569;
+				INFOPLIST_FILE = AnimeCloud/Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				OTHER_LDFLAGS = "-lsqlite3";
+				PRODUCT_BUNDLE_IDENTIFIER = com.animecloud.reborn;
+				PRODUCT_MODULE_NAME = AnimeCloud;
+				PRODUCT_NAME = AnimeCloud;
+				SDKROOT = iphoneos;
+				SWIFT_OBJC_BRIDGING_HEADER = AnimeCloud/Infrastructure/CryptoBridge.h;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		0981870EACAE46C3E9A70024 /* Build configuration list for PBXProject "AnimeCloud" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9E72DF5CC1D4A9F08D6CDCBF /* Debug */,
+				27B741F22BB1DCA535E7E768 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		181E987227B447A4F17B5F03 /* Build configuration list for PBXNativeTarget "AnimeCloudTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3C1596F289F9E2066560E68B /* Debug */,
+				B3B4555C8F5F0E2B8F036048 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		FFDADE7B87F522E5D75B5F0F /* Build configuration list for PBXNativeTarget "AnimeCloud" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				494DCB6B7213DF5B12CDE375 /* Debug */,
+				EAF6A513831707A0F1E385DC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = FECFF95283CDC11E5902C746 /* Project object */;
+}
