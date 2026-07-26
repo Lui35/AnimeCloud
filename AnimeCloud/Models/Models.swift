@@ -35,13 +35,17 @@ struct Anime: Codable, Identifiable, Hashable, Sendable {
     var year: String?
     var keywords: String?
     var day: String?
+    var latestEpisodeName: String?
 
     var imageURL: URL? { image.flatMap(URL.init(string:)) }
     var subtitle: String { [year, status].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " • ") }
 
-    enum CodingKeys: String, CodingKey { case id, name, image, status, year, keywords, day }
+    enum CodingKeys: String, CodingKey {
+        case id, name, image, status, year, keywords, day
+        case latestEpisodeName = "epName"
+    }
 
-    init(id: String, name: String, image: String? = nil, status: String? = nil, year: String? = nil, keywords: String? = nil, day: String? = nil) {
+    init(id: String, name: String, image: String? = nil, status: String? = nil, year: String? = nil, keywords: String? = nil, day: String? = nil, latestEpisodeName: String? = nil) {
         self.id = id
         self.name = name
         self.image = image
@@ -49,6 +53,7 @@ struct Anime: Codable, Identifiable, Hashable, Sendable {
         self.year = year
         self.keywords = keywords
         self.day = day
+        self.latestEpisodeName = latestEpisodeName
     }
 }
 
@@ -76,6 +81,26 @@ struct Episode: Codable, Identifiable, Hashable, Sendable {
     }
 
     var episodeTypeLabel: String { isFiller ? "Filler" : "Canon" }
+
+    /// AniList stores aggregate progress rather than individual episode IDs.
+    /// Legacy episode titles include the episode number in Arabic or Latin digits.
+    var episodeNumber: Int? {
+        let latinDigits = name.unicodeScalars.map { scalar -> Character in
+            if let value = scalar.properties.numericValue,
+               value.rounded() == value,
+               (0...9).contains(value) {
+                return Character(String(Int(value)))
+            }
+            return Character(String(scalar))
+        }
+        let groups = String(latinDigits).split { !$0.isNumber }
+        return groups.compactMap { Int($0) }.last
+    }
+}
+
+struct EpisodeWatchRecord: Codable, Hashable, Sendable {
+    var animeID: String
+    var episodeNumber: Int
 }
 
 extension Array where Element == Episode {
@@ -159,4 +184,8 @@ struct DetailEnvelope: Decodable {
     var mainResult: [AnimeSummary]?
     var result: [Episode]
     var SettingsResult: RemoteSettings?
+}
+
+struct NewContentEnvelope: Decodable {
+    var result2: [Anime]?
 }

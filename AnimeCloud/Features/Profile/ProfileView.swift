@@ -4,6 +4,7 @@ struct ProfileView: View {
     @EnvironmentObject private var model: AppModel
     @State private var showingLogin = false
     @State private var showingRecovery = false
+    @State private var showingAniList = false
 
     var body: some View {
         NavigationStack {
@@ -21,6 +22,7 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $showingLogin) { LoginView() }
         .sheet(isPresented: $showingRecovery) { PasswordRecoveryView() }
+        .sheet(isPresented: $showingAniList) { AniListSetupView(sync: model.aniList) }
     }
 
     private var identity: some View {
@@ -71,6 +73,8 @@ struct ProfileView: View {
             Divider().overlay(Color.white.opacity(0.08))
             setting("Sync library now", icon: "arrow.clockwise.icloud") { Task { await model.syncBackup() } }
             Divider().overlay(Color.white.opacity(0.08))
+            AniListSettingsRow(sync: model.aniList) { showingAniList = true }
+            Divider().overlay(Color.white.opacity(0.08))
             setting("Recover password", icon: "key") { showingRecovery = true }
             Divider().overlay(Color.white.opacity(0.08))
             HStack(spacing: 14) {
@@ -90,6 +94,124 @@ struct ProfileView: View {
             HStack(spacing: 14) { Image(systemName: icon).frame(width: 24); Text(title); Spacer(); Image(systemName: "chevron.right").foregroundStyle(CloudTheme.muted) }
                 .padding(16).contentShape(Rectangle())
         }.buttonStyle(.plain)
+    }
+}
+
+private struct AniListSettingsRow: View {
+    @ObservedObject var sync: AniListSyncManager
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 14) {
+                Image(systemName: "link.circle.fill").foregroundStyle(CloudTheme.cyan).frame(width: 24)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("AniList sync")
+                    Text(sync.account.map { "Connected as \($0.name) • \(sync.status)" } ?? "Optional account and episode progress sync")
+                        .font(.caption).foregroundStyle(CloudTheme.muted).lineLimit(2)
+                }
+                Spacer()
+                if sync.isSyncing { ProgressView().controlSize(.small) }
+                else { Image(systemName: sync.isConnected ? "checkmark.circle.fill" : "chevron.right").foregroundStyle(CloudTheme.cyan) }
+            }
+            .padding(16).contentShape(Rectangle())
+        }.buttonStyle(.plain)
+    }
+}
+
+private struct AniListSetupView: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var sync: AniListSyncManager
+    @State private var isConnecting = false
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                CloudBackground()
+                ScrollView {
+                    VStack(spacing: 18) {
+                        Image(systemName: "link.circle.fill")
+                            .font(.system(size: 58)).foregroundStyle(CloudTheme.cyan)
+                        Text(sync.account.map { "Connected as \($0.name)" } ?? "Connect AniList")
+                            .font(.title2.bold())
+                        Text("Anime statuses and the highest watched episode can stay in sync. Anime Cloud keeps your detailed episode history locally.")
+                            .font(.subheadline).foregroundStyle(CloudTheme.muted).multilineTextAlignment(.center)
+
+                        if sync.isConnected { connectedControls }
+                        else { setupControls }
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("Safe synchronization", systemImage: "shield.checkered")
+                                .font(.headline).foregroundStyle(CloudTheme.cyan)
+                            Text("Every sync downloads AniList first. The first connection never uploads, and ambiguous title matches are skipped.")
+                                .font(.caption).foregroundStyle(CloudTheme.muted)
+                            Text("Favorites remain an Anime Cloud-only category. Watching, planning, completed, and episode progress synchronize with AniList.")
+                                .font(.caption).foregroundStyle(CloudTheme.muted)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(16).cloudPanel()
+                    }
+                    .padding(24)
+                }
+            }
+            .navigationTitle("AniList")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
+        }
+    }
+
+    private var setupControls: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("One-time setup").font(.headline)
+            Text("Create an AniList developer client and set its redirect URL to:")
+                .font(.caption).foregroundStyle(CloudTheme.muted)
+            Text(sync.callbackURL)
+                .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                .foregroundStyle(CloudTheme.cyan)
+            Link("Open AniList developer settings", destination: URL(string: "https://anilist.co/settings/developer")!)
+                .font(.subheadline.weight(.semibold))
+            TextField("Numeric client ID", text: $sync.clientID)
+                .keyboardType(.numberPad).textContentType(.none)
+                .padding(14).background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
+            Button {
+                Task {
+                    isConnecting = true
+                    _ = await model.connectAniList()
+                    isConnecting = false
+                }
+            } label: {
+                Group {
+                    if isConnecting { ProgressView() }
+                    else { Label("Authorize with AniList", systemImage: "person.badge.key.fill") }
+                }
+                .frame(maxWidth: .infinity).frame(height: 48)
+            }
+            .buttonStyle(.borderedProminent).tint(CloudTheme.violet)
+            .disabled(Int(sync.clientID.trimmingCharacters(in: .whitespacesAndNewlines)) == nil || isConnecting)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading).padding(18).cloudPanel()
+    }
+
+    private var connectedControls: some View {
+        VStack(spacing: 0) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Automatic sync").font(.headline)
+                    Text(sync.status).font(.caption).foregroundStyle(CloudTheme.muted)
+                }
+                Spacer()
+                if sync.isSyncing { ProgressView() }
+                else { Image(systemName: "checkmark.seal.fill").foregroundStyle(CloudTheme.cyan) }
+            }.padding(16)
+            Divider().overlay(Color.white.opacity(0.08))
+            Button { Task { await model.syncAniListNow() } } label: {
+                Label("Sync AniList now", systemImage: "arrow.triangle.2.circlepath").frame(maxWidth: .infinity).padding(16)
+            }.buttonStyle(.plain).disabled(sync.isSyncing)
+            Divider().overlay(Color.white.opacity(0.08))
+            Button(role: .destructive) { model.disconnectAniList() } label: {
+                Label("Disconnect AniList", systemImage: "link.badge.minus").frame(maxWidth: .infinity).padding(16)
+            }.buttonStyle(.plain)
+        }.cloudPanel()
     }
 }
 

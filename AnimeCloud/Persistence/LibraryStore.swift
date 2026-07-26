@@ -1,20 +1,23 @@
 import Foundation
+import Combine
 import SQLite3
 
 @MainActor
 final class LibraryStore: ObservableObject {
     @Published private(set) var favorites: [Anime] = []
     @Published private(set) var libraryCategories: [String: LibraryCategory] = [:]
-    @Published private(set) var seenEpisodeIDs: Set<String> = []
+    private(set) var seenEpisodeIDs: Set<String> = []
     @Published private(set) var recentAnime: [Anime] = []
 
     var onChange: (() -> Void)?
+    let seenStatusChanged = PassthroughSubject<(episodeID: String, isSeen: Bool), Never>()
 
     private let defaults: UserDefaults
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private var favoriteTombstones: Set<String> = []
     private var seenTombstones: Set<String> = []
+    private var episodeWatchRecords: [String: EpisodeWatchRecord] = [:]
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -27,6 +30,7 @@ final class LibraryStore: ObservableObject {
         recentAnime = decode([Anime].self, key: "library.recent") ?? []
         favoriteTombstones = Set(decode([String].self, key: "library.favoriteTombstones") ?? [])
         seenTombstones = Set(decode([String].self, key: "library.seenTombstones") ?? [])
+        episodeWatchRecords = decode([String: EpisodeWatchRecord].self, key: "library.episodeWatchRecords") ?? [:]
     }
 
     func isFavorite(_ anime: Anime) -> Bool { category(for: anime) == .favorites }
@@ -51,22 +55,84 @@ final class LibraryStore: ObservableObject {
         persistAndNotify()
     }
 
-    func toggleSeen(_ episode: Episode) {
+    func toggleSeen(_ episode: Episode, anime: Anime? = nil) {
         if seenEpisodeIDs.contains(episode.id) {
             seenEpisodeIDs.remove(episode.id)
             seenTombstones.insert(episode.id)
+            episodeWatchRecords.removeValue(forKey: episode.id)
         } else {
             seenEpisodeIDs.insert(episode.id)
             seenTombstones.remove(episode.id)
+            recordEpisodeContext(episode, anime: anime)
         }
-        persistAndNotify()
+        seenStatusChanged.send((episode.id, seenEpisodeIDs.contains(episode.id)))
+        persistSeenAndNotify()
     }
 
-    func markSeen(_ episode: Episode) {
-        guard !seenEpisodeIDs.contains(episode.id) else { return }
+    func markSeen(_ episode: Episode, anime: Anime? = nil) {
+        if seenEpisodeIDs.contains(episode.id) {
+            guard recordEpisodeContext(episode, anime: anime) else { return }
+            persistSeenAndNotify()
+            return
+        }
         seenEpisodeIDs.insert(episode.id)
         seenTombstones.remove(episode.id)
-        persistAndNotify()
+        recordEpisodeContext(episode, anime: anime)
+        seenStatusChanged.send((episode.id, true))
+        persistSeenAndNotify()
+    }
+
+    func markUnseen(_ episode: Episode, anime: Anime? = nil) {
+        guard seenEpisodeIDs.contains(episode.id) else { return }
+        seenEpisodeIDs.remove(episode.id)
+        seenTombstones.insert(episode.id)
+        episodeWatchRecords.removeValue(forKey: episode.id)
+        seenStatusChanged.send((episode.id, false))
+        persistSeenAndNotify()
+    }
+
+    func highestWatchedEpisode(forAnimeID animeID: String) -> Int? {
+        episodeWatchRecords.values
+            .filter { $0.animeID == animeID }
+            .map(\.episodeNumber)
+            .max()
+    }
+
+    var watchedAnimeIDs: Set<String> {
+        Set(episodeWatchRecords.values.map(\.animeID))
+    }
+
+    /// Adds AniList's aggregate progress to the detailed local episode history.
+    /// Explicit local "unwatched" tombstones always win over a remote pull.
+    func mergeAniListProgress(_ progress: Int, anime: Anime, episodes: [Episode]) {
+        var changed = false
+        for episode in episodes {
+            if seenEpisodeIDs.contains(episode.id) {
+                changed = recordEpisodeContext(episode, anime: anime) || changed
+            }
+            guard let number = episode.episodeNumber,
+                  number <= progress,
+                  !seenTombstones.contains(episode.id),
+                  !seenEpisodeIDs.contains(episode.id) else { continue }
+            seenEpisodeIDs.insert(episode.id)
+            episodeWatchRecords[episode.id] = EpisodeWatchRecord(animeID: anime.id, episodeNumber: number)
+            seenStatusChanged.send((episode.id, true))
+            changed = true
+        }
+        if changed { persistSeenAndNotify() }
+    }
+
+    /// Imports AniList statuses without replacing an explicit Anime Cloud choice.
+    func mergeAniListCategories(_ values: [(anime: Anime, category: LibraryCategory)]) {
+        var changed = false
+        for value in values where libraryCategories[value.anime.id] == nil {
+            favorites.removeAll { $0.id == value.anime.id }
+            favorites.append(value.anime)
+            libraryCategories[value.anime.id] = value.category
+            favoriteTombstones.remove(value.anime.id)
+            changed = true
+        }
+        if changed { persistAndNotify() }
     }
 
     func recordOpened(_ anime: Anime) {
@@ -112,7 +178,11 @@ final class LibraryStore: ObservableObject {
             libraryCategories[remote.id] = remote.category
         }
         recentAnime = Array(mergeAnimeIDs(remoteRecent, into: recentAnime, knownAnime: knownAnime).prefix(12))
+        let seenBeforeMerge = seenEpisodeIDs
         seenEpisodeIDs.formUnion(remoteSeen)
+        for episodeID in seenEpisodeIDs.subtracting(seenBeforeMerge) {
+            seenStatusChanged.send((episodeID, true))
+        }
         persist()
     }
 
@@ -248,6 +318,22 @@ final class LibraryStore: ObservableObject {
         onChange?()
     }
 
+    private func persistSeenAndNotify() {
+        defaults.set(try? encoder.encode(Array(seenEpisodeIDs)), forKey: "library.seen")
+        defaults.set(try? encoder.encode(Array(seenTombstones)), forKey: "library.seenTombstones")
+        defaults.set(try? encoder.encode(episodeWatchRecords), forKey: "library.episodeWatchRecords")
+        onChange?()
+    }
+
+    @discardableResult
+    private func recordEpisodeContext(_ episode: Episode, anime: Anime?) -> Bool {
+        guard let anime, let number = episode.episodeNumber else { return false }
+        let value = EpisodeWatchRecord(animeID: anime.id, episodeNumber: number)
+        guard episodeWatchRecords[episode.id] != value else { return false }
+        episodeWatchRecords[episode.id] = value
+        return true
+    }
+
     private func persist() {
         defaults.set(try? encoder.encode(favorites), forKey: "library.favorites")
         defaults.set(try? encoder.encode(libraryCategories), forKey: "library.categories")
@@ -255,6 +341,7 @@ final class LibraryStore: ObservableObject {
         defaults.set(try? encoder.encode(recentAnime), forKey: "library.recent")
         defaults.set(try? encoder.encode(Array(favoriteTombstones)), forKey: "library.favoriteTombstones")
         defaults.set(try? encoder.encode(Array(seenTombstones)), forKey: "library.seenTombstones")
+        defaults.set(try? encoder.encode(episodeWatchRecords), forKey: "library.episodeWatchRecords")
     }
 
     private func decode<T: Decodable>(_ type: T.Type, key: String) -> T? {

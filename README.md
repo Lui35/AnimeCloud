@@ -5,10 +5,14 @@ A native SwiftUI reimplementation of Anime Cloud, built from the recovered 6.5 A
 ## Included
 
 - Live home, discovery, schedule, detail, episode, comment, and playback flows
+- Restored New Episodes home rail backed by the legacy live feed, with the latest episode label on every card
+- A Related Series button on every anime preview, with sequel/prequel cards that open their complete preview pages
 - Native iOS video controls with stable fullscreen transitions, movie-playback audio, AirPlay, Picture in Picture, and locally cached per-episode resume positions
 - Cancellation-safe playback: dismissing an episode while it is loading cancels the request, detaches the media item, and deactivates audio
+- Use each episode’s three-dot menu to mark it watched or unwatched, with cloud-safe removal syncing
 - End-of-episode Up Next panel with Play Next, Replay, watched-state updates, and all-caught-up handling
 - Four original library categories (Favorites, Watched, Watch Later, Watching Now), watch history, profile/authentication, and automatic legacy-compatible SQLite cloud sync
+- Optional AniList OAuth connection with download-first status sync and highest-watched-episode progress; access tokens are stored in iOS Keychain
 - A grounded recommendation assistant that only suggests titles returned by the catalog
 - Native SwiftUI design, generated app icon, two-stage branded loading experience, Arabic/English content support, and no third-party dependencies
 
@@ -24,6 +28,14 @@ No third-party package is required. The app uses SwiftUI, URLSession, AVKit, and
 The project has been compiled and its unit tests run successfully on an iPhone simulator with Xcode 26.5.
 
 Cloud sync is download-first: the app retrieves and merges the server database before any upload. The first login for an account is restore-only, so an empty local library can never replace an existing cloud backup. Later local changes are debounced and synchronized automatically.
+
+## Optional AniList setup
+
+1. In AniList developer settings, create an API client with redirect URL `animecloud://anilist-auth`.
+2. In Anime Cloud, open **You → AniList sync**, enter the numeric client ID, and authorize.
+3. The first connection downloads only. Later changes to Watching Now, Watch Later, Watched, and episode progress sync automatically after downloading AniList first.
+
+AniList only exposes aggregate episode progress, so Anime Cloud keeps its detailed watched-episode set locally and sends the highest watched episode. Favorites remain local. Exact title/year matches are linked automatically; ambiguous matches are skipped.
 
 ## AI integration
 

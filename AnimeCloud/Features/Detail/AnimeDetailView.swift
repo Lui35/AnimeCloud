@@ -5,12 +5,10 @@ import SwiftUI
 struct AnimeDetailView: View {
     @EnvironmentObject private var model: AppModel
     let anime: Anime
-    @ObservedObject var library: LibraryStore
+    let library: LibraryStore
     @State private var detail: AnimeDetail?
-    @State private var comments: [AnimeComment] = []
     @State private var isLoading = true
     @State private var selectedEpisode: Episode?
-    @State private var showingComments = false
 
     var body: some View {
         ZStack {
@@ -40,7 +38,6 @@ struct AnimeDetailView: View {
                 progressStore: model.playbackProgress
             )
         }
-        .sheet(isPresented: $showingComments) { CommentSheet(anime: anime, comments: comments) }
     }
 
     private var hero: some View {
@@ -56,10 +53,21 @@ struct AnimeDetailView: View {
                             .buttonStyle(PrimaryCapsuleStyle())
                     }
                     LibrarySaveMenu(anime: anime, store: library, size: 48)
-                    Button { showingComments = true } label: {
-                        Image(systemName: "text.bubble").frame(width: 48, height: 48).background(.ultraThinMaterial, in: Circle())
-                    }
                 }
+                NavigationLink {
+                    RelatedAnimeView(
+                        anime: anime,
+                        relatedID: detail?.summary?.relatedID,
+                        library: library
+                    )
+                } label: {
+                    Label("Related series", systemImage: "rectangle.stack.fill")
+                        .font(.subheadline.weight(.bold))
+                        .padding(.horizontal, 17)
+                        .frame(height: 42)
+                        .background(.ultraThinMaterial, in: Capsule())
+                }
+                .disabled(detail == nil)
             }.padding(.horizontal, 20)
         }
     }
@@ -91,30 +99,14 @@ struct AnimeDetailView: View {
             SectionHeading(title: "Episodes", subtitle: "Newest first").padding(.horizontal, 20)
             LazyVStack(spacing: 12) {
                 ForEach(items) { episode in
-                    Button { selectedEpisode = episode } label: {
-                        HStack(spacing: 13) {
-                            RemoteArtwork(url: episode.imageURL).frame(width: 120, height: 72).clipShape(RoundedRectangle(cornerRadius: 13))
-                            VStack(alignment: .leading, spacing: 7) {
-                                Text(episode.name).font(.headline).multilineTextAlignment(.leading)
-                                HStack(spacing: 8) {
-                                    if let progress = model.playbackProgress.progress(for: episode.id) {
-                                        Label("Resume \(PlaybackTimeFormatter.string(progress.position))", systemImage: "clock.arrow.circlepath")
-                                            .font(.caption).foregroundStyle(CloudTheme.cyan)
-                                    } else {
-                                        Label(library.isSeen(episode) ? "Watched" : "Ready to play", systemImage: library.isSeen(episode) ? "checkmark.circle.fill" : "play.circle")
-                                            .font(.caption).foregroundStyle(library.isSeen(episode) ? CloudTheme.cyan : CloudTheme.muted)
-                                    }
-                                    EpisodeTypeBadge(episode: episode)
-                                }
-                                if let progress = model.playbackProgress.progress(for: episode.id) {
-                                    ProgressView(value: progress.fraction)
-                                        .tint(CloudTheme.cyan)
-                                        .frame(maxWidth: 170)
-                                }
-                            }
-                            Spacer(); Image(systemName: "chevron.right").foregroundStyle(CloudTheme.muted)
-                        }.padding(10).cloudPanel()
-                    }.buttonStyle(.plain)
+                    EpisodeRow(
+                        anime: anime,
+                        episode: episode,
+                        library: library,
+                        progressStore: model.playbackProgress
+                    ) {
+                        selectedEpisode = episode
+                    }
                 }
             }.padding(.horizontal, 16)
         }
@@ -122,11 +114,72 @@ struct AnimeDetailView: View {
 
     private func load() async {
         library.recordOpened(anime)
-        async let detailResult = try? model.api.animeDetail(id: anime.id)
-        async let commentResult = try? model.api.comments(animeID: anime.id)
-        let values = await (detailResult, commentResult)
-        detail = values.0
-        comments = values.1 ?? []
+        let loadedDetail = try? await model.api.animeDetail(id: anime.id)
+        detail = loadedDetail
+        if let episodes = loadedDetail?.episodes {
+            model.applyAniListProgress(to: anime, episodes: episodes)
+        }
+        isLoading = false
+    }
+}
+
+private struct RelatedAnimeView: View {
+    @EnvironmentObject private var model: AppModel
+    let anime: Anime
+    let relatedID: String?
+    let library: LibraryStore
+    @State private var items: [Anime] = []
+    @State private var isLoading = true
+    @State private var errorMessage: String?
+    @State private var reloadToken = UUID()
+
+    private let columns = [GridItem(.adaptive(minimum: 142), spacing: 16)]
+
+    var body: some View {
+        ZStack {
+            CloudBackground()
+            if isLoading {
+                ProgressView("Finding connected stories…")
+            } else if let errorMessage {
+                VStack(spacing: 18) {
+                    EmptyCloud(title: "Related series unavailable", detail: errorMessage, systemImage: "rectangle.stack.badge.exclamationmark")
+                    Button("Try Again", systemImage: "arrow.clockwise") { reloadToken = UUID() }
+                        .buttonStyle(.borderedProminent).tint(CloudTheme.violet)
+                }.padding(24)
+            } else if items.isEmpty {
+                EmptyCloud(
+                    title: "No related series found",
+                    detail: "The Anime Cloud catalog does not currently link another season, sequel, prequel, or movie to \(anime.name).",
+                    systemImage: "rectangle.stack"
+                )
+            } else {
+                ScrollView {
+                    LazyVGrid(columns: columns, alignment: .leading, spacing: 22) {
+                        ForEach(items) { related in
+                            NavigationLink {
+                                AnimeDetailView(anime: related, library: library)
+                            } label: {
+                                PosterView(anime: related, width: 142, height: 204)
+                            }.buttonStyle(.plain)
+                        }
+                    }
+                    .padding(20)
+                }
+            }
+        }
+        .navigationTitle("Related to \(anime.name)")
+        .navigationBarTitleDisplayMode(.inline)
+        .task(id: reloadToken) { await load() }
+    }
+
+    private func load() async {
+        isLoading = true
+        errorMessage = nil
+        do {
+            items = try await model.api.relatedAnime(animeID: anime.id, relatedID: relatedID)
+        } catch {
+            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
         isLoading = false
     }
 }
@@ -138,12 +191,109 @@ struct PrimaryCapsuleStyle: ButtonStyle {
     }
 }
 
+private struct EpisodeRow: View {
+    let anime: Anime
+    let episode: Episode
+    let library: LibraryStore
+    @ObservedObject var progressStore: PlaybackProgressStore
+    let onOpen: () -> Void
+    @State private var displayedIsSeen: Bool
+    @State private var statusCommitTask: Task<Void, Never>?
+
+    init(
+        anime: Anime,
+        episode: Episode,
+        library: LibraryStore,
+        progressStore: PlaybackProgressStore,
+        onOpen: @escaping () -> Void
+    ) {
+        self.anime = anime
+        self.episode = episode
+        self.library = library
+        self.progressStore = progressStore
+        self.onOpen = onOpen
+        _displayedIsSeen = State(initialValue: library.isSeen(episode))
+    }
+
+    var body: some View {
+        rowContent
+            .cloudPanel()
+            .onReceive(library.seenStatusChanged) { change in
+                guard change.episodeID == episode.id else { return }
+                displayedIsSeen = change.isSeen
+            }
+    }
+
+    private var rowContent: some View {
+        HStack(spacing: 8) {
+            HStack(spacing: 13) {
+                RemoteArtwork(url: episode.imageURL)
+                    .frame(width: 120, height: 72)
+                    .clipShape(RoundedRectangle(cornerRadius: 13))
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(episode.name).font(.headline).multilineTextAlignment(.leading)
+                    HStack(spacing: 8) {
+                        if let progress = progressStore.progress(for: episode.id) {
+                            Label("Resume \(PlaybackTimeFormatter.string(progress.position))", systemImage: "clock.arrow.circlepath")
+                                .font(.caption).foregroundStyle(CloudTheme.cyan)
+                        } else {
+                            Label(displayedIsSeen ? "Watched" : "Ready to play", systemImage: displayedIsSeen ? "checkmark.circle.fill" : "play.circle")
+                                .font(.caption).foregroundStyle(displayedIsSeen ? CloudTheme.cyan : CloudTheme.muted)
+                        }
+                        EpisodeTypeBadge(episode: episode)
+                    }
+                    if let progress = progressStore.progress(for: episode.id) {
+                        ProgressView(value: progress.fraction)
+                            .tint(CloudTheme.cyan)
+                            .frame(maxWidth: 170)
+                    }
+                }
+                Spacer()
+            }
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onOpen)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { onOpen() }
+
+            Menu {
+                Button {
+                    commitSeenStatus(!displayedIsSeen)
+                } label: {
+                    Label(
+                        displayedIsSeen ? "Mark as Unwatched" : "Mark as Watched",
+                        systemImage: displayedIsSeen ? "eye.slash" : "checkmark.circle"
+                    )
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(CloudTheme.muted)
+                    .frame(width: 38, height: 52)
+            }
+            .accessibilityLabel("Options for \(episode.name)")
+        }
+        .padding(10)
+    }
+
+    private func commitSeenStatus(_ newValue: Bool) {
+        displayedIsSeen = newValue
+        statusCommitTask?.cancel()
+        statusCommitTask = Task { @MainActor in
+            // Let the native Menu dismiss and the optimistic row update render first.
+            try? await Task.sleep(for: .milliseconds(80))
+            guard !Task.isCancelled else { return }
+            if newValue { library.markSeen(episode, anime: anime) }
+            else { library.markUnseen(episode, anime: anime) }
+        }
+    }
+}
+
 private struct PlayerSheet: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
     let anime: Anime
     let episodes: [Episode]
-    @ObservedObject var library: LibraryStore
+    let library: LibraryStore
     @ObservedObject var progressStore: PlaybackProgressStore
     @State private var episode: Episode
     @State private var player: AVPlayer?
@@ -355,7 +505,7 @@ private struct PlayerSheet: View {
             Task { @MainActor in
                 guard isPlayerVisible else { return }
                 progressStore.clear(episodeID: completedEpisode.id)
-                library.markSeen(completedEpisode)
+                library.markSeen(completedEpisode, anime: anime)
                 withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) { showingUpNext = true }
             }
         }
@@ -372,7 +522,7 @@ private struct PlayerSheet: View {
             Task { @MainActor in
                 progressStore.save(episodeID: episodeID, position: position, duration: duration)
                 if duration.isFinite, duration > 0, position / duration >= 0.90 {
-                    library.markSeen(episode)
+                    library.markSeen(episode, anime: anime)
                 }
             }
         }
@@ -439,46 +589,14 @@ private struct EpisodeTypeBadge: View {
     let episode: Episode
 
     var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: episode.isFiller ? "wand.and.stars" : "checkmark.seal.fill")
-            Text(episode.episodeTypeLabel.uppercased())
-        }
-        .font(.caption2.weight(.black))
-        .tracking(0.6)
+        Image(systemName: episode.isFiller ? "wand.and.stars" : "checkmark.seal.fill")
+        .font(.caption.weight(.black))
         .foregroundStyle(episode.isFiller ? CloudTheme.coral : CloudTheme.cyan)
-        .padding(.horizontal, 7)
-        .padding(.vertical, 4)
-        .background((episode.isFiller ? CloudTheme.coral : CloudTheme.cyan).opacity(0.14), in: Capsule())
+        .frame(width: 26, height: 26)
+        .background((episode.isFiller ? CloudTheme.coral : CloudTheme.cyan).opacity(0.14), in: Circle())
         .overlay {
-            Capsule().stroke((episode.isFiller ? CloudTheme.coral : CloudTheme.cyan).opacity(0.28), lineWidth: 1)
+            Circle().stroke((episode.isFiller ? CloudTheme.coral : CloudTheme.cyan).opacity(0.28), lineWidth: 1)
         }
         .accessibilityLabel(episode.isFiller ? "Filler episode" : "Canon episode")
-    }
-}
-
-private struct CommentSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    let anime: Anime
-    let comments: [AnimeComment]
-
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                CloudBackground()
-                if comments.isEmpty { EmptyCloud(title: "No comments yet", detail: "Be the first to start a thoughtful conversation.", systemImage: "text.bubble") }
-                else {
-                    List(comments) { comment in
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(comment.username ?? "Anime Cloud user").font(.headline)
-                            Text(comment.content ?? "").font(.body)
-                            HStack { Label(comment.likes ?? "0", systemImage: "hand.thumbsup"); Label(comment.dislikes ?? "0", systemImage: "hand.thumbsdown") }
-                                .font(.caption).foregroundStyle(CloudTheme.muted)
-                        }.listRowBackground(CloudTheme.panel)
-                    }.scrollContentBackground(.hidden)
-                }
-            }
-            .navigationTitle("Discussion")
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
-        }
     }
 }

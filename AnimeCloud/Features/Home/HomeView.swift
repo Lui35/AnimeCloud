@@ -12,9 +12,9 @@ struct HomeView: View {
                         header
                         if model.isBootstrapping && model.featured.isEmpty { ProgressView().frame(maxWidth: .infinity).padding(.top, 120) }
                         else if let hero = model.featured.first { HeroCard(anime: hero, library: model.library) }
+                        if !model.newlyAddedEpisodes.isEmpty { newEpisodesRail }
                         if !model.featured.isEmpty { posterRail(title: "Trending in the cloud", items: Array(model.featured.dropFirst())) }
                         if !model.library.recentAnime.isEmpty { posterRail(title: "Continue exploring", items: model.library.recentAnime) }
-                        if !model.news.isEmpty { newsRail }
                     }
                     .padding(.bottom, 110)
                 }
@@ -56,24 +56,53 @@ struct HomeView: View {
         }
     }
 
-    private var newsRail: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            SectionHeading(title: "Cloud bulletin", subtitle: "Updates from Anime Cloud").padding(.horizontal, 20)
-            ForEach(model.news.prefix(3)) { item in
-                HStack(spacing: 14) {
-                    RemoteArtwork(url: item.imageURL).frame(width: 74, height: 74).clipShape(RoundedRectangle(cornerRadius: 16))
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(item.title).font(.headline).lineLimit(2)
-                        Text(item.content?.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression) ?? "Latest Anime Cloud update")
-                            .font(.caption).foregroundStyle(CloudTheme.muted).lineLimit(2)
+    private var newEpisodesRail: some View {
+        VStack(alignment: .leading, spacing: 15) {
+            SectionHeading(title: "New episodes", subtitle: "Freshly added to Anime Cloud")
+                .padding(.horizontal, 20)
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(alignment: .top, spacing: 14) {
+                    ForEach(model.newlyAddedEpisodes) { anime in
+                        NavigationLink(value: anime) { NewEpisodeCard(anime: anime) }
+                            .buttonStyle(.plain)
                     }
-                    Spacer()
                 }
-                .padding(12)
-                .cloudPanel()
                 .padding(.horizontal, 20)
             }
         }
+    }
+
+}
+
+private struct NewEpisodeCard: View {
+    let anime: Anime
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            RemoteArtwork(url: anime.imageURL)
+                .frame(width: 158, height: 218)
+                .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
+                .overlay(alignment: .bottomLeading) {
+                    if let episode = anime.latestEpisodeName, !episode.isEmpty {
+                        Text(episode)
+                            .font(.caption.weight(.black))
+                            .lineLimit(1)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .background(.ultraThinMaterial, in: Capsule())
+                            .padding(10)
+                    }
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 19).stroke(CloudTheme.cyan.opacity(0.24), lineWidth: 1)
+                }
+            Text(anime.name)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(2)
+                .frame(width: 158, alignment: .leading)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Opens the anime preview")
     }
 }
 

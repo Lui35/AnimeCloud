@@ -92,6 +92,30 @@ actor LegacyAPI {
         )
     }
 
+    func relatedAnime(animeID: String, relatedID: String?) async throws -> [Anime] {
+        let rootID = Self.relatedRootID(animeID: animeID, relatedID: relatedID)
+        return try await catalog(.getRelatedAnime, fields: [
+            "animeID": animeID,
+            "rootID": rootID,
+            "cmode": "0",
+            "hiddenMode": "0"
+        ]).filter { $0.id != animeID }
+    }
+
+    func newlyAddedEpisodes() async throws -> [Anime] {
+        let envelope = try await decode(
+            NewContentEnvelope.self,
+            command: .getNewEpAndAnime,
+            fields: ["cmode": "0", "hiddenMode": "0"]
+        )
+        return envelope.result2 ?? []
+    }
+
+    nonisolated static func relatedRootID(animeID: String, relatedID: String?) -> String {
+        let candidate = relatedID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return candidate.flatMap { $0.isEmpty || $0 == "0" ? nil : $0 } ?? animeID
+    }
+
     func news() async throws -> [NewsItem] {
         try await decode(APIEnvelope<[NewsItem]>.self, command: .getNews).result
     }

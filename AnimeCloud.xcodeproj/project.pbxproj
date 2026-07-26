@@ -14,6 +14,7 @@
 		42475837307BB4ACADB3B50B /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2422096CD942F6DB97F00B3A /* Models.swift */; };
 		4A126A7B3F58B4B0C4A1FEDE /* DiscoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8531B8C59D300652FDE9567B /* DiscoverView.swift */; };
 		4B905ADE12E1496C7CE2B931 /* LibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 537D4BE60471483468FF3D27 /* LibraryStore.swift */; };
+		5FA8106BDD5197935E4A4183 /* AniListService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7469F355B89BCAD15B234389 /* AniListService.swift */; };
 		62535061A530AFAC99182D61 /* AnimeCloudApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8017B8CE5B3DF8BE3075471A /* AnimeCloudApp.swift */; };
 		7F6C4D930A6F9BD89E1F62CE /* ScheduleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 551D83A5E1DE2489310F0230 /* ScheduleView.swift */; };
 		835CC8D7DE43AE435307B2B8 /* PosterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C230C5F7B2FF684AEB02DAEF /* PosterView.swift */; };
@@ -53,6 +54,7 @@
 		568D760F6FE9B42DF3E658CE /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		5906E360EBCFC5AF86993361 /* AnimeDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimeDetailView.swift; sourceTree = "<group>"; };
 		7171E5903EE32DB865A5D2E7 /* LibrarySaveMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySaveMenu.swift; sourceTree = "<group>"; };
+		7469F355B89BCAD15B234389 /* AniListService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AniListService.swift; sourceTree = "<group>"; };
 		7CF7195AF672B77A146E76DD /* PlaybackProgressStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackProgressStore.swift; sourceTree = "<group>"; };
 		8017B8CE5B3DF8BE3075471A /* AnimeCloudApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimeCloudApp.swift; sourceTree = "<group>"; };
 		8531B8C59D300652FDE9567B /* DiscoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverView.swift; sourceTree = "<group>"; };
@@ -149,6 +151,7 @@
 		96054E0B0612B2BDDF48B143 /* Networking */ = {
 			isa = PBXGroup;
 			children = (
+				7469F355B89BCAD15B234389 /* AniListService.swift */,
 				AB3B4E176151881D81A6D604 /* LegacyAPI.swift */,
 			);
 			path = Networking;
@@ -340,6 +343,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5FA8106BDD5197935E4A4183 /* AniListService.swift in Sources */,
 				62535061A530AFAC99182D61 /* AnimeCloudApp.swift in Sources */,
 				3EE7F73324406D2FD871F007 /* AnimeDetailView.swift in Sources */,
 				E22DD67D1E46DD70B229F288 /* AppModel.swift in Sources */,
@@ -446,6 +450,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -550,6 +555,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

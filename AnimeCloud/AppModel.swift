@@ -8,11 +8,12 @@ final class AppModel: ObservableObject {
     let library = LibraryStore()
     let playbackProgress = PlaybackProgressStore()
     let discovery = GroundedDiscoveryService()
+    let aniList = AniListSyncManager()
 
     @Published var featured: [Anime] = []
     @Published var schedule: [Anime] = []
+    @Published var newlyAddedEpisodes: [Anime] = []
     @Published var catalog: [Anime] = []
-    @Published var news: [NewsItem] = []
     @Published var session: UserSession?
     @Published var isBootstrapping = false
     @Published var isCatalogLoading = false
@@ -23,6 +24,7 @@ final class AppModel: ObservableObject {
     private let defaults = UserDefaults.standard
     private var didBootstrap = false
     private var automaticSyncTask: Task<Void, Never>?
+    private var aniListAutomaticSyncTask: Task<Void, Never>?
     private var syncInProgress = false
 
     init(api: LegacyAPI) {
@@ -40,16 +42,19 @@ final class AppModel: ObservableObject {
         isBootstrapping = true
         async let featuredResult = try? api.catalog(.getMost, fields: visibilityFields)
         async let scheduleResult = try? api.catalog(.getAnimeWithDays, fields: visibilityFields)
-        async let newsResult = try? api.news()
-        let (newFeatured, newSchedule, newNews) = await (featuredResult, scheduleResult, newsResult)
+        async let newEpisodesResult = try? api.newlyAddedEpisodes()
+        let (newFeatured, newSchedule, newEpisodes) = await (featuredResult, scheduleResult, newEpisodesResult)
         featured = newFeatured ?? []
         schedule = newSchedule ?? []
-        news = newNews ?? []
+        newlyAddedEpisodes = newEpisodes ?? []
         isBootstrapping = false
         if session != nil {
             Task { await synchronizeCloud(uploadIfDirty: true, showResult: false) }
         }
-        if featured.isEmpty && schedule.isEmpty {
+        if aniList.isConnected {
+            Task { await synchronizeAniList(uploadIfDirty: true, showResult: false) }
+        }
+        if featured.isEmpty && schedule.isEmpty && newlyAddedEpisodes.isEmpty {
             message = AppMessage(title: "Clouds are quiet", detail: "The legacy Anime Cloud server did not return a catalog. Pull to try again.")
         }
     }
@@ -104,19 +109,78 @@ final class AppModel: ObservableObject {
     }
 
     func syncCloudInBackground() async {
-        guard session != nil else { return }
-        await synchronizeCloud(uploadIfDirty: true, showResult: false)
+        if session != nil { await synchronizeCloud(uploadIfDirty: true, showResult: false) }
+        if aniList.isConnected { await synchronizeAniList(uploadIfDirty: true, showResult: false) }
+    }
+
+    func connectAniList() async -> Bool {
+        await loadCatalog()
+        do {
+            try await aniList.connect(library: library, catalog: knownAnime)
+            message = AppMessage(
+                title: "AniList connected",
+                detail: "Your AniList library was downloaded first. Nothing was uploaded during this first connection. Future Anime Cloud changes will sync automatically."
+            )
+            return true
+        } catch {
+            message = AppMessage(error: error)
+            return false
+        }
+    }
+
+    func syncAniListNow() async {
+        guard aniList.isConnected else {
+            message = AppMessage(title: "Connect AniList first", detail: "Open the AniList setting and authorize your account.")
+            return
+        }
+        await synchronizeAniList(uploadIfDirty: true, showResult: true)
+    }
+
+    func disconnectAniList() {
+        aniListAutomaticSyncTask?.cancel()
+        aniList.disconnect()
+    }
+
+    func applyAniListProgress(to anime: Anime, episodes: [Episode]) {
+        guard aniList.isConnected else { return }
+        aniList.applyRemoteProgress(to: anime, episodes: episodes, library: library)
     }
 
     private func libraryDidChange() {
-        guard let session else { return }
-        defaults.set(true, forKey: dirtyKey(for: session))
-        cloudSyncStatus = "Waiting to sync changes"
-        automaticSyncTask?.cancel()
-        automaticSyncTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(2))
-            guard !Task.isCancelled else { return }
-            await self?.synchronizeCloud(uploadIfDirty: true, showResult: false)
+        if let session {
+            defaults.set(true, forKey: dirtyKey(for: session))
+            cloudSyncStatus = "Waiting to sync changes"
+            automaticSyncTask?.cancel()
+            automaticSyncTask = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(2))
+                guard !Task.isCancelled else { return }
+                await self?.synchronizeCloud(uploadIfDirty: true, showResult: false)
+            }
+        }
+
+        if aniList.isConnected, !aniList.isApplyingRemote {
+            aniList.markDirty()
+            aniListAutomaticSyncTask?.cancel()
+            aniListAutomaticSyncTask = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(3))
+                guard !Task.isCancelled else { return }
+                await self?.synchronizeAniList(uploadIfDirty: true, showResult: false)
+            }
+        }
+    }
+
+    private func synchronizeAniList(uploadIfDirty: Bool, showResult: Bool) async {
+        do {
+            try await aniList.synchronize(library: library, catalog: knownAnime, uploadIfDirty: uploadIfDirty)
+            if showResult {
+                message = AppMessage(
+                    title: "AniList synced",
+                    detail: "AniList was downloaded before local statuses and watched-episode progress were uploaded."
+                )
+            }
+        } catch {
+            aniList.noteSyncFailure(error)
+            if showResult { message = AppMessage(error: error) }
         }
     }
 
@@ -182,6 +246,13 @@ final class AppModel: ObservableObject {
 
     private func baselineKey(for account: UserSession) -> String { "cloud.baseline.\(account.userID)" }
     private func dirtyKey(for account: UserSession) -> String { "cloud.dirty.\(account.userID)" }
+
+    private var knownAnime: [Anime] {
+        Array(Dictionary(
+            (catalog + featured + schedule + newlyAddedEpisodes + library.favorites + library.recentAnime).map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        ).values)
+    }
 
     var visibilityFields: [String: String] { ["cmode": "0", "hiddenMode": "0"] }
 }
