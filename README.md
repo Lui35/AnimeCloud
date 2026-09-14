@@ -1,60 +1,112 @@
-# Anime Cloud for iOS
+# AnimeCloud
 
-A native SwiftUI reimplementation of Anime Cloud, built from the recovered 6.5 API contract.
+A native SwiftUI client for discovering, tracking, and watching anime from the Anime Cloud catalog on iPhone and iPad.
 
-## Included
+[![iOS 17+](https://img.shields.io/badge/iOS-17%2B-0A84FF?logo=apple)](https://developer.apple.com/ios/)
+[![Swift 5](https://img.shields.io/badge/Swift-5-F05138?logo=swift&logoColor=white)](https://www.swift.org/)
+[![Main CI](https://github.com/Lui35/AnimeCloud/actions/workflows/main-ci.yml/badge.svg)](https://github.com/Lui35/AnimeCloud/actions/workflows/main-ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/Lui35/AnimeCloud?label=release)](https://github.com/Lui35/AnimeCloud/releases/latest)
 
-- Live home, discovery, schedule, detail, episode, comment, and playback flows
-- Restored New Episodes home rail backed by the legacy live feed, with the latest episode label on every card
-- A Related Series button on every anime preview, with sequel/prequel cards that open their complete preview pages
-- Native iOS video controls with stable fullscreen transitions, movie-playback audio, AirPlay, Picture in Picture, and locally cached per-episode resume positions
-- Cancellation-safe playback: dismissing an episode while it is loading cancels the request, detaches the media item, and deactivates audio
-- Use each episode’s three-dot menu to mark it watched or unwatched, with cloud-safe removal syncing
-- End-of-episode Up Next panel with Play Next, Replay, watched-state updates, and all-caught-up handling
-- Four original library categories (Favorites, Watched, Watch Later, Watching Now), watch history, profile/authentication, and automatic legacy-compatible SQLite cloud sync
-- Optional AniList OAuth connection with download-first status sync and highest-watched-episode progress; access tokens are stored in iOS Keychain
-- A grounded recommendation assistant that only suggests titles returned by the catalog
-- Native SwiftUI design, generated app icon, two-stage branded loading experience, Arabic/English content support, and no third-party dependencies
+## Screenshots
 
-## Open and run
+<p align="center">
+  <img src="docs/screenshots/home.png" width="23%" alt="AnimeCloud home screen">
+  <img src="docs/screenshots/discover.png" width="23%" alt="AnimeCloud discovery catalog">
+  <img src="docs/screenshots/details.png" width="23%" alt="AnimeCloud title details">
+  <img src="docs/screenshots/schedule.png" width="23%" alt="AnimeCloud weekly schedule">
+</p>
+
+## Highlights
+
+- Live home, discovery, weekly schedule, title details, episodes, comments, and playback
+- Native video controls with fullscreen playback, AirPlay, Picture in Picture, and per-episode resume positions
+- Favorites, Watched, Watch Later, Watching Now, watch history, and legacy-compatible cloud sync
+- Episode-level watched state, automatic Up Next handling, replay, and all-caught-up states
+- Related series navigation for sequels and prequels
+- Optional AniList OAuth sync for library status and highest-watched-episode progress
+- Grounded catalog recommendations that only return titles available in AnimeCloud
+- Arabic and English content support
+- A dependency-free SwiftUI codebase using URLSession, AVKit, SQLite, and CommonCrypto
+
+## Install the unsigned IPA
+
+Each versioned [GitHub Release](https://github.com/Lui35/AnimeCloud/releases) includes:
+
+- `AnimeCloud-vX.Y.Z-unsigned.ipa` — the installable application archive
+- `AnimeCloud-vX.Y.Z-unsigned.ipa.sha256` — its SHA-256 checksum
+
+Download the IPA from the latest release and import it into LiveContainer or another compatible sideloading tool. The IPA is intentionally unsigned: its `Payload/AnimeCloud.app` contains no embedded provisioning profile or stale signature, allowing the installation tool to sign it for the target device.
+
+The checksum can be verified on macOS with:
+
+```sh
+shasum -a 256 -c AnimeCloud-vX.Y.Z-unsigned.ipa.sha256
+```
+
+> The IPA is not an App Store package and cannot be installed directly by tapping it. You are responsible for using an appropriate signing or container solution and complying with Apple’s and the content provider’s terms.
+
+## Build from source
+
+Requirements:
+
+- Xcode 16 or newer
+- iOS 17 or newer deployment target
+- An Apple Development team when installing directly on a physical device
+
+Then:
 
 1. Open `AnimeCloud.xcodeproj` in Xcode.
-2. Select the **AnimeCloud** scheme and an iPhone running iOS 17 or newer.
-3. Choose your Apple Development team under Signing & Capabilities.
+2. Select the **AnimeCloud** scheme and a compatible iPhone or iPad.
+3. Choose your team under **Signing & Capabilities**.
 4. Build and run.
 
-No third-party package is required. The app uses SwiftUI, URLSession, AVKit, and CommonCrypto.
+No third-party packages are required.
 
-The project has been compiled and its unit tests run successfully on an iPhone simulator with Xcode 26.5.
-
-## CI and unsigned IPA releases
-
-Pull requests into `main` and pushes to `main` run the **Main CI / Build and test** check. The pipeline runs the unit tests, builds an unsigned device app, packages it as `AnimeCloud-unsigned.ipa`, and retains it as a workflow artifact for 14 days.
-
-Pushing a semantic version tag such as `v1.0.0` runs the release workflow and attaches `AnimeCloud-v1.0.0-unsigned.ipa` to a GitHub Release. The workflow can also be started manually with a semantic version tag. The IPA contains an unsigned `Payload/AnimeCloud.app`, with any signature and provisioning profile removed, so a compatible container or sideloading tool can sign it at install time.
-
-The same artifact can be built locally:
+To produce the same unsigned device archive used by CI:
 
 ```sh
 Scripts/build-unsigned-ipa.sh
 ```
 
-Protect the `main` branch in GitHub with the **Main CI / Build and test** status check required, pull requests required, stale approvals dismissed, force pushes disabled, and branch deletion disabled. Branch protection is a repository setting and is not controlled by workflow YAML.
+The resulting file is written to `Build/Unsigned/AnimeCloud-unsigned.ipa`.
 
-Cloud sync is download-first: the app retrieves and merges the server database before any upload. The first login for an account is restore-only, so an empty local library can never replace an existing cloud backup. Later local changes are debounced and synchronized automatically.
+## AniList integration
 
-## Optional AniList setup
+1. Create an AniList API client with `animecloud://anilist-auth` as its redirect URL.
+2. In AnimeCloud, open **You → AniList sync**, enter the numeric client ID, and authorize.
+3. The first connection downloads existing AniList state before any upload. Later local changes synchronize after another download-first merge.
 
-1. In AniList developer settings, create an API client with redirect URL `animecloud://anilist-auth`.
-2. In Anime Cloud, open **You → AniList sync**, enter the numeric client ID, and authorize.
-3. The first connection downloads only. Later changes to Watching Now, Watch Later, Watched, and episode progress sync automatically after downloading AniList first.
+AniList exposes aggregate episode progress, so AnimeCloud sends the highest watched episode while retaining the detailed watched-episode set locally. Favorites remain local. Exact title/year matches are linked automatically; ambiguous matches are skipped. OAuth access tokens are stored in the iOS Keychain.
 
-AniList only exposes aggregate episode progress, so Anime Cloud keeps its detailed watched-episode set locally and sends the highest watched episode. Favorites remain local. Exact title/year matches are linked automatically; ambiguous matches are skipped.
+## Data safety
 
-## AI integration
+Cloud synchronization is download-first. The first login for an account is restore-only, preventing an empty local library from replacing an existing cloud backup. Later changes are debounced and merged automatically, including explicit removal tombstones for library and watched-episode state.
 
-`AnimeIntelligenceProviding` is the AI boundary. The included `GroundedDiscoveryService` performs private, deterministic matching against the live catalog. A Firebase AI Logic/Gemini implementation can replace it later while preserving the rule that every returned anime ID must exist in the catalog. Do not embed a Gemini API key in this target.
+## Continuous integration and releases
 
-## Legacy backend warning
+The `main` branch is protected. Pull requests and pushes run **Main CI / Build and test**, which:
 
-The app talks to the original Anime Cloud servers. They use an old command-based PHP API and may change without notice. Account and write operations should be tested with a dedicated test account before production distribution.
+1. Builds the app and runs its unit tests on an available iPhone simulator.
+2. Builds the arm64 device application with code signing disabled.
+3. Packages and validates the unsigned IPA.
+4. Uploads the IPA as a workflow artifact for 14 days.
+
+Pushing a semantic version tag such as `v1.0.0`, or manually running the release workflow with that tag, creates a GitHub Release. The workflow uploads the IPA and checksum and then verifies both assets are present on the release.
+
+## Project structure
+
+```text
+AnimeCloud/
+├── AI/               Catalog-grounded discovery
+├── Components/       Shared SwiftUI components
+├── Design/           Theme and visual system
+├── Features/         Home, Discover, Schedule, Library, Profile, Details
+├── Infrastructure/   Playback decryption bridge
+├── Models/           Domain models
+├── Networking/       Legacy API and AniList clients
+└── Persistence/      Library and playback state
+```
+
+## Backend notice
+
+AnimeCloud communicates with the original Anime Cloud servers through a legacy command-based API. Those endpoints are outside this repository’s control and may change or become unavailable without notice. Test account and write operations with non-critical data.

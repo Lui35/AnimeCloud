@@ -70,17 +70,40 @@ jobs:
           IPA_NAME: AnimeCloud-${{ steps.release.outputs.tag }}-unsigned.ipa
         run: Scripts/build-unsigned-ipa.sh
 
+      - name: Generate SHA-256 checksum
+        env:
+          IPA_PATH: Build/Unsigned/AnimeCloud-${{ steps.release.outputs.tag }}-unsigned.ipa
+        run: |
+          ipa_directory="$(dirname "${IPA_PATH}")"
+          ipa_name="$(basename "${IPA_PATH}")"
+          (cd "${ipa_directory}" && shasum -a 256 "${ipa_name}" > "${ipa_name}.sha256")
+
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.release.outputs.tag }}
           IPA_PATH: Build/Unsigned/AnimeCloud-${{ steps.release.outputs.tag }}-unsigned.ipa
+          RELEASE_NOTES: |
+            Download the unsigned IPA below for use with LiveContainer or another compatible sideloading tool. The archive is intentionally unsigned and must be signed by the installation tool for the target device.
+
+            Use the accompanying `.sha256` file to verify the download with `shasum -a 256 -c <filename>.sha256`.
         run: |
           if gh release view "${TAG}" >/dev/null 2>&1; then
-            gh release upload "${TAG}" "${IPA_PATH}" --clobber
+            gh release upload "${TAG}" "${IPA_PATH}" "${IPA_PATH}.sha256" --clobber
           else
-            gh release create "${TAG}" "${IPA_PATH}" \
+            gh release create "${TAG}" "${IPA_PATH}" "${IPA_PATH}.sha256" \
               --verify-tag \
               --generate-notes \
+              --notes "${RELEASE_NOTES}" \
               --title "AnimeCloud ${TAG}"
           fi
+
+      - name: Verify release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          IPA_NAME: AnimeCloud-${{ steps.release.outputs.tag }}-unsigned.ipa
+        run: |
+          asset_names="$(gh release view "${TAG}" --json assets --jq '.assets[].name')"
+          grep -Fxq "${IPA_NAME}" <<< "${asset_names}"
+          grep -Fxq "${IPA_NAME}.sha256" <<< "${asset_names}"
