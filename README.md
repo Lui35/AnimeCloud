@@ -27,6 +27,20 @@ No third-party package is required. The app uses SwiftUI, URLSession, AVKit, and
 
 The project has been compiled and its unit tests run successfully on an iPhone simulator with Xcode 26.5.
 
+## CI and unsigned IPA releases
+
+Pull requests into `main` and pushes to `main` run the **Main CI / Build and test** check. The pipeline runs the unit tests, builds an unsigned device app, packages it as `AnimeCloud-unsigned.ipa`, and retains it as a workflow artifact for 14 days.
+
+Pushing a semantic version tag such as `v1.0.0` runs the release workflow and attaches `AnimeCloud-v1.0.0-unsigned.ipa` to a GitHub Release. The workflow can also be started manually with a semantic version tag. The IPA contains an unsigned `Payload/AnimeCloud.app`, with any signature and provisioning profile removed, so a compatible container or sideloading tool can sign it at install time.
+
+The same artifact can be built locally:
+
+```sh
+Scripts/build-unsigned-ipa.sh
+```
+
+Protect the `main` branch in GitHub with the **Main CI / Build and test** status check required, pull requests required, stale approvals dismissed, force pushes disabled, and branch deletion disabled. Branch protection is a repository setting and is not controlled by workflow YAML.
+
 Cloud sync is download-first: the app retrieves and merges the server database before any upload. The first login for an account is restore-only, so an empty local library can never replace an existing cloud backup. Later local changes are debounced and synchronized automatically.
 
 ## Optional AniList setup
