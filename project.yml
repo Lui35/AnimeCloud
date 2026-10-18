@@ -11,17 +11,24 @@ settings:
     CODE_SIGN_STYLE: Automatic
     CURRENT_PROJECT_VERSION: 1
     MARKETING_VERSION: 1.0.0
+packages:
+  Anime4KMetal:
+    path: ThirdParty/anime4k-metal
 targets:
   AnimeCloud:
     type: application
     platform: iOS
     sources:
       - path: AnimeCloud
+    dependencies:
+      - package: Anime4KMetal
+        product: Anime4KMetal
     settings:
       base:
         PRODUCT_MODULE_NAME: AnimeCloud
         PRODUCT_BUNDLE_IDENTIFIER: com.animecloud.reborn
         PRODUCT_NAME: AnimeCloud
+        DEVELOPMENT_TEAM: WWJ39PU569
         INFOPLIST_FILE: AnimeCloud/Resources/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_OBJC_BRIDGING_HEADER: AnimeCloud/Infrastructure/CryptoBridge.h

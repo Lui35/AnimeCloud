@@ -90,6 +90,59 @@ final class AnimeCloudTests: XCTestCase {
         XCTAssertTrue(LegacyCommand.allCases.allSatisfy { $0.gateway.url.scheme == "https" })
     }
 
+    func testAnime4KOffersOffAndEveryBundledPreset() {
+        XCTAssertEqual(Anime4KPlaybackMode.allCases.count, 13)
+        XCTAssertEqual(Anime4KPlaybackMode.fastModes.count, 6)
+        XCTAssertEqual(Anime4KPlaybackMode.highQualityModes.count, 6)
+        XCTAssertEqual(Anime4KPlaybackMode.benchmarkPriority.count, 12)
+        XCTAssertNil(Anime4KPlaybackMode.off.preset)
+        XCTAssertTrue(Anime4KPlaybackMode.allCases.dropFirst().allSatisfy { $0.preset != nil })
+    }
+
+    func testAnime4KBenchmarkRecommendsHighestPrioritySmoothMode() {
+        let samples = [
+            Anime4KBenchmarkSample(
+                mode: .modeAAHQ,
+                averageMilliseconds: 45,
+                worstMilliseconds: 52,
+                errorDescription: nil
+            ),
+            Anime4KBenchmarkSample(
+                mode: .modeAHQ,
+                averageMilliseconds: 22,
+                worstMilliseconds: 27,
+                errorDescription: nil
+            ),
+            Anime4KBenchmarkSample(
+                mode: .modeAFast,
+                averageMilliseconds: 8,
+                worstMilliseconds: 10,
+                errorDescription: nil
+            )
+        ]
+
+        XCTAssertEqual(
+            Anime4KBenchmarkReport.recommendation(from: samples),
+            .modeAHQ
+        )
+    }
+
+    func testAnime4KBenchmarkFallsBackToOffWithoutSmoothPreset() {
+        let samples = [
+            Anime4KBenchmarkSample(
+                mode: .modeAFast,
+                averageMilliseconds: 31,
+                worstMilliseconds: 40,
+                errorDescription: nil
+            )
+        ]
+
+        XCTAssertEqual(
+            Anime4KBenchmarkReport.recommendation(from: samples),
+            .off
+        )
+    }
+
     func testAnimeSubtitle() {
         let anime = Anime(id: "1", name: "Cloud", status: "Ongoing", year: "2026")
         XCTAssertEqual(anime.subtitle, "2026 • Ongoing")

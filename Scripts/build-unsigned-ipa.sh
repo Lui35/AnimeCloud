@@ -20,6 +20,7 @@ XCODEBUILD_ARGUMENTS=(
   -sdk iphoneos
   -destination "generic/platform=iOS"
   -derivedDataPath "${DERIVED_DATA_PATH}"
+  -skipPackagePluginValidation
   CODE_SIGNING_ALLOWED=NO
   CODE_SIGNING_REQUIRED=NO
   CODE_SIGN_IDENTITY=""

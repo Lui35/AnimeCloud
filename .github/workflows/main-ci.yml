@@ -43,6 +43,7 @@ jobs:
             -configuration Debug \
             -destination "platform=iOS Simulator,id=${simulator_id}" \
             -derivedDataPath Build/DerivedData-CI \
+            -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO \
             clean test
 
