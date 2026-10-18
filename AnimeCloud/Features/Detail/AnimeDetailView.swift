@@ -304,6 +304,9 @@ private struct PlayerSheet: View {
     @State private var retryToken = UUID()
     @State private var showingUpNext = false
     @State private var isPlayerVisible = true
+    @State private var isAnime4KFullscreen = false
+    @StateObject private var anime4KBenchmark = Anime4KBenchmarkController()
+    @AppStorage("playback.anime4k.mode") private var anime4KModeRawValue = Anime4KPlaybackMode.off.rawValue
 
     init(
         anime: Anime,
@@ -323,7 +326,28 @@ private struct PlayerSheet: View {
         NavigationStack {
             ZStack {
                 Color.black.ignoresSafeArea()
-                if let player { NativeVideoPlayer(player: player).ignoresSafeArea(edges: .horizontal) }
+                if let player, !anime4KBenchmark.isRunning {
+                    if !isAnime4KFullscreen {
+                        if let preset = anime4KMode.preset {
+                            ZStack {
+                                Anime4KVideoPlayer(player: player, preset: preset)
+                                    .id(anime4KMode.rawValue)
+                                EnhancedVideoControls(
+                                    player: player,
+                                    isFullscreen: false,
+                                    toggleFullscreen: { isAnime4KFullscreen = true },
+                                    hideControls: nil,
+                                    anime4KMode: nil,
+                                    selectAnime4KMode: nil,
+                                    runAnime4KBenchmark: nil
+                                )
+                            }
+                            .ignoresSafeArea(edges: .horizontal)
+                        } else {
+                            NativeVideoPlayer(player: player).ignoresSafeArea(edges: .horizontal)
+                        }
+                    }
+                }
                 else if let error {
                     VStack(spacing: 18) {
                         EmptyCloud(title: "Playback unavailable", detail: error, systemImage: "exclamationmark.triangle")
@@ -346,7 +370,10 @@ private struct PlayerSheet: View {
             }
             .navigationTitle(episode.name)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { closePlayer() } } }
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) { anime4KMenu }
+                ToolbarItem(placement: .topBarTrailing) { Button("Done") { closePlayer() } }
+            }
             // SwiftUI emits onDisappear while AVPlayerViewController enters and exits
             // native fullscreen, so it cannot be used as a dismissal signal. Requiring
             // Done gives playback one unambiguous cleanup path.
@@ -360,9 +387,50 @@ private struct PlayerSheet: View {
                 await preparePlayback(requestID: requestID)
             }
         }
+        .overlay {
+            if !isAnime4KFullscreen {
+                Anime4KBenchmarkOverlay(
+                    controller: anime4KBenchmark,
+                    applyMode: selectAnime4KMode
+                )
+            }
+        }
+        .fullScreenCover(isPresented: $isAnime4KFullscreen) {
+            if let player {
+                Anime4KFullscreenPlayer(
+                    player: player,
+                    modeRawValue: $anime4KModeRawValue,
+                    benchmark: anime4KBenchmark,
+                    isPresented: $isAnime4KFullscreen
+                )
+            }
+        }
+    }
+
+    private var anime4KMode: Anime4KPlaybackMode {
+        Anime4KPlaybackMode(rawValue: anime4KModeRawValue) ?? .off
+    }
+
+    private var anime4KMenu: some View {
+        Anime4KModeMenu(
+            mode: anime4KMode,
+            selectMode: selectAnime4KMode,
+            runBenchmark: runAnime4KBenchmark
+        )
+    }
+
+    private func selectAnime4KMode(_ mode: Anime4KPlaybackMode) {
+        anime4KModeRawValue = mode.rawValue
+    }
+
+    private func runAnime4KBenchmark() {
+        guard let player else { return }
+        anime4KBenchmark.start(player: player)
     }
 
     private func closePlayer() {
+        anime4KBenchmark.cancel()
+        isAnime4KFullscreen = false
         isPlayerVisible = false
         tearDownPlayer()
         dismiss()
@@ -554,6 +622,92 @@ private struct PlayerSheet: View {
             return "This older episode uses an insecure media URL that iOS blocked. Try again after updating the app."
         }
         return (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+    }
+}
+
+private struct Anime4KFullscreenPlayer: View {
+    let player: AVPlayer
+    @Binding var modeRawValue: String
+    @ObservedObject var benchmark: Anime4KBenchmarkController
+    @Binding var isPresented: Bool
+    @State private var controlsAreVisible = true
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            if !benchmark.isRunning {
+                Group {
+                    if let preset = mode.preset {
+                        Anime4KVideoPlayer(player: player, preset: preset)
+                            .id("fullscreen-\(mode.rawValue)")
+                    } else {
+                        NativeVideoSurface(player: player)
+                    }
+                }
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture { toggleControls() }
+            }
+            if controlsAreVisible && !benchmark.isRunning && benchmark.report == nil {
+                EnhancedVideoControls(
+                    player: player,
+                    isFullscreen: true,
+                    toggleFullscreen: { isPresented = false },
+                    hideControls: { hideControls() },
+                    anime4KMode: mode,
+                    selectAnime4KMode: selectMode,
+                    runAnime4KBenchmark: runBenchmark
+                )
+                .ignoresSafeArea(edges: .horizontal)
+                .transition(.opacity)
+            }
+            Anime4KBenchmarkOverlay(
+                controller: benchmark,
+                applyMode: selectMode
+            )
+        }
+        .animation(.easeInOut(duration: 0.18), value: controlsAreVisible)
+        .statusBarHidden(true)
+        .persistentSystemOverlays(.hidden)
+        .onAppear { PlaybackOrientation.request(.landscape) }
+        .onDisappear { PlaybackOrientation.request(.portrait) }
+    }
+
+    private var mode: Anime4KPlaybackMode {
+        Anime4KPlaybackMode(rawValue: modeRawValue) ?? .off
+    }
+
+    private func selectMode(_ mode: Anime4KPlaybackMode) {
+        modeRawValue = mode.rawValue
+    }
+
+    private func runBenchmark() {
+        benchmark.start(player: player)
+    }
+
+    private func toggleControls() {
+        controlsAreVisible.toggle()
+    }
+
+    private func hideControls() {
+        controlsAreVisible = false
+    }
+}
+
+private enum PlaybackOrientation {
+    @MainActor
+    static func request(_ orientations: UIInterfaceOrientationMask) {
+        guard UIDevice.current.userInterfaceIdiom == .phone,
+              let scene = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene })
+                .first(where: { $0.activationState == .foregroundActive })
+        else { return }
+
+        scene.requestGeometryUpdate(.iOS(interfaceOrientations: orientations))
+        scene.windows
+            .first(where: \.isKeyWindow)?
+            .rootViewController?
+            .setNeedsUpdateOfSupportedInterfaceOrientations()
     }
 }
 

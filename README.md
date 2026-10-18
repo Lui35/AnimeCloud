@@ -20,13 +20,14 @@ A native SwiftUI client for discovering, tracking, and watching anime from the A
 
 - Live home, discovery, weekly schedule, title details, episodes, comments, and playback
 - Native video controls with fullscreen playback, AirPlay, Picture in Picture, and per-episode resume positions
+- Optional real-time Anime4K Metal upscaling with all Fast and High Quality presets
 - Favorites, Watched, Watch Later, Watching Now, watch history, and legacy-compatible cloud sync
 - Episode-level watched state, automatic Up Next handling, replay, and all-caught-up states
 - Related series navigation for sequels and prequels
 - Optional AniList OAuth sync for library status and highest-watched-episode progress
 - Grounded catalog recommendations that only return titles available in AnimeCloud
 - Arabic and English content support
-- A dependency-free SwiftUI codebase using URLSession, AVKit, SQLite, and CommonCrypto
+- A native SwiftUI codebase using URLSession, AVKit, Metal, SQLite, and CommonCrypto
 
 ## Install the unsigned IPA
 
@@ -53,6 +54,12 @@ Requirements:
 - iOS 17 or newer deployment target
 - An Apple Development team when installing directly on a physical device
 
+AnimeCloud vendors its Anime4K Metal package, so no package download is required. Xcode 26 separates the Metal compiler into a downloadable component; install it once if Xcode prompts, or run:
+
+```sh
+xcodebuild -downloadComponent MetalToolchain
+```
+
 Then:
 
 1. Open `AnimeCloud.xcodeproj` in Xcode.
@@ -60,7 +67,7 @@ Then:
 3. Choose your team under **Signing & Capabilities**.
 4. Build and run.
 
-No third-party packages are required.
+No dependency fetch is required; the compatible Anime4K Metal source and notices are kept under `ThirdParty/`.
 
 To produce the same unsigned device archive used by CI:
 
@@ -69,6 +76,16 @@ Scripts/build-unsigned-ipa.sh
 ```
 
 The resulting file is written to `Build/Unsigned/AnimeCloud-unsigned.ipa`.
+
+## Anime4K playback
+
+AnimeCloud can upscale video in real time with Anime4K shaders running on the device's Metal GPU. Open the sparkle menu in the player to choose **Off**, any **Fast** preset, or any **High Quality** preset. The available presets are A, B, C, A+A, B+B, and C+A in both quality tiers. Selecting **Off** returns to the native player.
+
+The same menu is available before and during fullscreen playback, so the mode can be changed without leaving fullscreen. Fullscreen controls can be hidden with the chevron and shown again by tapping the video.
+
+Choose **Run Device Benchmark** from the Anime4K menu to test all 12 presets at the current display target. Playback pauses during the test and resumes afterward. The result shows average and worst processing times, recommends the highest-quality preset that can sustain 30 fps with headroom, and provides a **Use Recommended** action.
+
+Run the benchmark on the physical iPhone or iPad you intend to use. A simulator benchmark measures the Mac's GPU and is not representative of performance on the iOS device.
 
 ## AniList integration
 
@@ -101,7 +118,7 @@ AnimeCloud/
 ├── Components/       Shared SwiftUI components
 ├── Design/           Theme and visual system
 ├── Features/         Home, Discover, Schedule, Library, Profile, Details
-├── Infrastructure/   Playback decryption bridge
+├── Infrastructure/   Playback decryption and Anime4K rendering
 ├── Models/           Domain models
 ├── Networking/       Legacy API and AniList clients
 └── Persistence/      Library and playback state
