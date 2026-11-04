@@ -217,7 +217,20 @@ private struct EpisodeRow: View {
 
     var body: some View {
         rowContent
+            .background {
+                if displayedIsSeen {
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .fill(CloudTheme.cyan.opacity(0.08))
+                }
+            }
             .cloudPanel()
+            .overlay {
+                if displayedIsSeen {
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .stroke(CloudTheme.cyan.opacity(0.45), lineWidth: 1)
+                        .allowsHitTesting(false)
+                }
+            }
             .onReceive(library.seenStatusChanged) { change in
                 guard change.episodeID == episode.id else { return }
                 displayedIsSeen = change.isSeen
@@ -229,7 +242,19 @@ private struct EpisodeRow: View {
             HStack(spacing: 13) {
                 RemoteArtwork(url: episode.imageURL)
                     .frame(width: 120, height: 72)
+                    .overlay(alignment: .bottomLeading) {
+                        if displayedIsSeen {
+                            Label("Watched", systemImage: "checkmark.circle.fill")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(CloudTheme.ink)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 5)
+                                .background(CloudTheme.cyan, in: Capsule())
+                                .padding(6)
+                        }
+                    }
                     .clipShape(RoundedRectangle(cornerRadius: 13))
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 7) {
                     Text(episode.name).font(.headline).multilineTextAlignment(.leading)
                     HStack(spacing: 8) {
@@ -237,8 +262,8 @@ private struct EpisodeRow: View {
                             Label("Resume \(PlaybackTimeFormatter.string(progress.position))", systemImage: "clock.arrow.circlepath")
                                 .font(.caption).foregroundStyle(CloudTheme.cyan)
                         } else {
-                            Label(displayedIsSeen ? "Watched" : "Ready to play", systemImage: displayedIsSeen ? "checkmark.circle.fill" : "play.circle")
-                                .font(.caption).foregroundStyle(displayedIsSeen ? CloudTheme.cyan : CloudTheme.muted)
+                            Label(displayedIsSeen ? "Watch again" : "Ready to play", systemImage: displayedIsSeen ? "arrow.counterclockwise" : "play.circle")
+                                .font(.caption).foregroundStyle(CloudTheme.muted)
                         }
                         EpisodeTypeBadge(episode: episode)
                     }
@@ -252,6 +277,8 @@ private struct EpisodeRow: View {
             }
             .contentShape(Rectangle())
             .onTapGesture(perform: onOpen)
+            .accessibilityElement(children: .combine)
+            .accessibilityValue(displayedIsSeen ? "Watched" : "Unwatched")
             .accessibilityAddTraits(.isButton)
             .accessibilityAction { onOpen() }
 
@@ -268,7 +295,7 @@ private struct EpisodeRow: View {
                 Image(systemName: "ellipsis.circle")
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(CloudTheme.muted)
-                    .frame(width: 38, height: 52)
+                    .frame(width: 44, height: 52)
             }
             .accessibilityLabel("Options for \(episode.name)")
         }
@@ -571,16 +598,16 @@ private struct PlayerSheet: View {
             queue: .main
         ) { _ in
             Task { @MainActor in
-                guard isPlayerVisible else { return }
+                guard isPlayerVisible, episode.id == completedEpisode.id else { return }
                 progressStore.clear(episodeID: completedEpisode.id)
-                library.markSeen(completedEpisode, anime: anime)
+                library.completePlayback(of: completedEpisode, anime: anime, episodes: episodes)
                 withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) { showingUpNext = true }
             }
         }
     }
 
     private func installProgressObserver(on player: AVPlayer) {
-        let episodeID = episode.id
+        let observedEpisode = episode
         timeObserver = player.addPeriodicTimeObserver(
             forInterval: CMTime(seconds: 3, preferredTimescale: 600),
             queue: .main
@@ -588,10 +615,9 @@ private struct PlayerSheet: View {
             let duration = player.currentItem?.duration.seconds ?? 0
             let position = time.seconds
             Task { @MainActor in
-                progressStore.save(episodeID: episodeID, position: position, duration: duration)
-                if duration.isFinite, duration > 0, position / duration >= 0.90 {
-                    library.markSeen(episode, anime: anime)
-                }
+                guard isPlayerVisible, episode.id == observedEpisode.id else { return }
+                progressStore.save(episodeID: observedEpisode.id, position: position, duration: duration)
+                library.recordPlayback(of: observedEpisode, anime: anime, episodes: episodes, position: position, duration: duration)
             }
         }
     }
@@ -601,6 +627,7 @@ private struct PlayerSheet: View {
             let duration = player.currentItem?.duration.seconds ?? 0
             let position = player.currentTime().seconds
             progressStore.save(episodeID: episode.id, position: position, duration: duration)
+            library.recordPlayback(of: episode, anime: anime, episodes: episodes, position: position, duration: duration)
             if let timeObserver { player.removeTimeObserver(timeObserver) }
             player.pause()
             player.replaceCurrentItem(with: nil)
