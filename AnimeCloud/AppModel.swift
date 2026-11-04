@@ -5,8 +5,8 @@ final class AppModel: ObservableObject {
     static let live = AppModel(api: .live)
 
     let api: LegacyAPI
-    let library = LibraryStore()
-    let playbackProgress = PlaybackProgressStore()
+    let library: LibraryStore
+    let playbackProgress: PlaybackProgressStore
     let discovery = GroundedDiscoveryService()
     let aniList = AniListSyncManager()
 
@@ -21,14 +21,17 @@ final class AppModel: ObservableObject {
     @Published var cloudSyncStatus = "Sign in to enable automatic sync"
     @Published var message: AppMessage?
 
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
     private var didBootstrap = false
     private var automaticSyncTask: Task<Void, Never>?
     private var aniListAutomaticSyncTask: Task<Void, Never>?
     private var syncInProgress = false
 
-    init(api: LegacyAPI) {
+    init(api: LegacyAPI, defaults: UserDefaults = .standard) {
         self.api = api
+        self.defaults = defaults
+        library = LibraryStore(defaults: defaults)
+        playbackProgress = PlaybackProgressStore(defaults: defaults)
         if let data = defaults.data(forKey: "account.session") {
             session = try? JSONDecoder().decode(UserSession.self, from: data)
         }
@@ -185,7 +188,14 @@ final class AppModel: ObservableObject {
     }
 
     private func synchronizeCloud(uploadIfDirty: Bool, showResult: Bool) async {
-        guard let account = session, !syncInProgress else { return }
+        guard let account = session else { return }
+        // Login must still restore its account if a foreground sync is finishing.
+        while syncInProgress {
+            do { try await Task.sleep(for: .milliseconds(50)) }
+            catch { return }
+            guard session == account else { return }
+        }
+        guard session == account else { return }
         syncInProgress = true
         isCloudSyncing = true
         defer {
@@ -201,13 +211,20 @@ final class AppModel: ObservableObject {
             cloudSyncStatus = "Downloading cloud library…"
             do {
                 let remoteData = try await api.downloadBackup(user: account)
-                guard session?.userID == account.userID else { return }
+                guard session == account else { return }
                 try library.mergeBackup(remoteData, catalog: catalog + featured + schedule)
+                if library.favorites.contains(where: { $0.name == "Anime #\($0.id)" }),
+                   let restoredCatalog = try? await api.catalog(.getAllAnime, fields: visibilityFields) {
+                    guard session == account else { return }
+                    catalog = restoredCatalog
+                    library.hydrate(with: restoredCatalog)
+                }
             } catch APIError.server(let code) where code == 404 {
                 // No remote file is a valid first-sync state. It still must not
                 // trigger an upload during this initial login.
             }
 
+            guard session == account else { return }
             defaults.set(true, forKey: baselineKey)
 
             guard hadBaseline else {

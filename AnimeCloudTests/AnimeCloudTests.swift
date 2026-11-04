@@ -29,24 +29,177 @@ final class AnimeCloudTests: XCTestCase {
     }
 
     @MainActor
+    func testHalfwayPlaybackAutomaticallyStartsWatchingAndPersists() {
+        let suite = "AnimeCloudTests.autoWatching.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = LibraryStore(defaults: defaults)
+        let anime = Anime(id: "new-series", name: "New series", status: "Completed")
+        let episode = Episode(id: "first", name: "Episode 1")
+        let episodes = [Episode(id: "last", name: "Episode 2"), episode]
+        var changes = 0
+        store.onChange = { changes += 1 }
+        store.recordPlayback(of: episode, anime: anime, episodes: episodes, position: 49, duration: 100)
+        XCTAssertNil(store.category(for: anime))
+        store.recordPlayback(of: episode, anime: anime, episodes: episodes, position: 50, duration: 100)
+        XCTAssertEqual(store.category(for: anime), .watchingNow)
+        XCTAssertFalse(store.isSeen(episode))
+        XCTAssertEqual(LibraryStore(defaults: defaults).category(for: anime), .watchingNow)
+        XCTAssertEqual(store.favorites.map(\.id), [anime.id])
+        store.recordPlayback(of: episode, anime: anime, episodes: episodes, position: 60, duration: 100)
+        XCTAssertEqual(changes, 1, "Periodic playback must not repeatedly reschedule cloud sync")
+    }
+
+    @MainActor
+    func testCompletingLastCanonEpisodeIgnoresTrailingFiller() {
+        let suite = "AnimeCloudTests.autoCompleted.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = LibraryStore(defaults: defaults)
+        let anime = Anime(id: "finished", name: "Finished series", status: "مكتمل")
+        let filler = Episode(id: "filler", name: "Episode 3", filer: "1")
+        let finale = Episode(id: "finale", name: "Episode 2")
+        let first = Episode(id: "first", name: "Episode 1")
+        let episodes = [filler, finale, first]
+        store.setCategory(.watchLater, for: anime)
+        store.completePlayback(of: first, anime: anime, episodes: episodes)
+        XCTAssertEqual(store.category(for: anime), .watchingNow)
+        store.recordPlayback(of: finale, anime: anime, episodes: episodes, position: 89, duration: 100)
+        XCTAssertEqual(store.category(for: anime), .watchingNow)
+        store.recordPlayback(of: finale, anime: anime, episodes: episodes, position: 90, duration: 100)
+        XCTAssertEqual(store.category(for: anime), .watched)
+        XCTAssertTrue(store.isSeen(finale))
+        XCTAssertFalse(store.isSeen(filler))
+        store.recordPlayback(of: first, anime: anime, episodes: episodes, position: 50, duration: 100)
+        XCTAssertEqual(store.category(for: anime), .watched, "Rewatching must not undo completion")
+        XCTAssertEqual(LibraryStore(defaults: defaults).category(for: anime), .watched)
+    }
+
+    @MainActor
+    func testOngoingAndUnknownSeriesStayWatchingAfterLatestEpisode() {
+        let suite = "AnimeCloudTests.ongoing.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = LibraryStore(defaults: defaults)
+        for status in ["مستمر", "Ongoing", "", "Unknown"] {
+            let anime = Anime(id: status, name: "Series", status: status)
+            let latest = Episode(id: "latest-\(status)", name: "Episode 1")
+            store.completePlayback(of: latest, anime: anime, episodes: [latest])
+            XCTAssertEqual(store.category(for: anime), .watchingNow)
+        }
+        let anime = Anime(id: "all-filler", name: "Filler series", status: "Completed")
+        let filler = Episode(id: "only-filler", name: "Episode 1", filer: "1")
+        store.completePlayback(of: filler, anime: anime, episodes: [filler])
+        XCTAssertEqual(store.category(for: anime), .watchingNow)
+    }
+
+    @MainActor
+    func testInvalidPlaybackDoesNotChangeLibrary() {
+        let suite = "AnimeCloudTests.invalidPlayback.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = LibraryStore(defaults: defaults)
+        let anime = Anime(id: "invalid", name: "Series", status: "Completed")
+        let episode = Episode(id: "invalid-episode", name: "Episode 1")
+        for (position, duration) in [(Double.nan, 100.0), (100, Double.infinity), (100, 0), (-50, 100)] {
+            store.recordPlayback(of: episode, anime: anime, episodes: [episode], position: position, duration: duration)
+        }
+        XCTAssertNil(store.category(for: anime))
+        XCTAssertFalse(store.isSeen(episode))
+    }
+
+    @MainActor
+    func testLoginAutomaticallyRestoresEveryListAndEpisodeHistory() async throws {
+        let suite = "AnimeCloudTests.loginRestore.\(UUID())"
+        let sourceSuite = "AnimeCloudTests.loginSource.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        let sourceDefaults = UserDefaults(suiteName: sourceSuite)!
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+            sourceDefaults.removePersistentDomain(forName: sourceSuite)
+            RestoreFixtureProtocol.backup = Data()
+        }
+        let source = LibraryStore(defaults: sourceDefaults)
+        let catalog = LibraryCategory.allCases.map { Anime(id: $0.rawValue, name: $0.title, image: "https://example.com/\($0.rawValue).jpg", status: "Completed") }
+        for (anime, category) in zip(catalog, LibraryCategory.allCases) { source.setCategory(category, for: anime) }
+        let episode = Episode(id: "restored-episode", name: "Episode 1")
+        source.markSeen(episode)
+        RestoreFixtureProtocol.backup = try source.backupData()
+        RestoreFixtureProtocol.catalog = catalog
+        RestoreFixtureProtocol.uploadRequests = 0
+        RestoreFixtureProtocol.downloadRequests = 0
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [RestoreFixtureProtocol.self]
+        let model = AppModel(api: LegacyAPI(session: URLSession(configuration: configuration)), defaults: defaults)
+
+        let loggedIn = await model.login(email: "restore@example.com", password: "test-only")
+
+        XCTAssertTrue(loggedIn)
+        XCTAssertEqual(RestoreFixtureProtocol.downloadRequests, 1)
+        XCTAssertEqual(RestoreFixtureProtocol.uploadRequests, 0)
+        for (anime, category) in zip(catalog, LibraryCategory.allCases) {
+            XCTAssertEqual(model.library.category(for: anime), category)
+            XCTAssertEqual(model.library.favorites.first { $0.id == anime.id }, anime)
+        }
+        XCTAssertTrue(model.library.isSeen(episode))
+        XCTAssertTrue(defaults.bool(forKey: "cloud.baseline.restore-test"))
+        model.logout()
+    }
+
+    @MainActor
+    func testLoginWaitsForExistingCloudSyncBeforeRestoring() async throws {
+        let suite = "AnimeCloudTests.concurrentLogin.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+            RestoreFixtureProtocol.backup = Data()
+            RestoreFixtureProtocol.downloadDelay = 0
+        }
+        let anime = Anime(id: "watching", name: "Watching series", status: "Ongoing")
+        let source = LibraryStore(defaults: defaults)
+        source.setCategory(.watchingNow, for: anime)
+        RestoreFixtureProtocol.backup = try source.backupData()
+        defaults.removePersistentDomain(forName: suite)
+        RestoreFixtureProtocol.downloadRequests = 0
+        RestoreFixtureProtocol.uploadRequests = 0
+        RestoreFixtureProtocol.downloadDelay = 0.2
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [RestoreFixtureProtocol.self]
+        let model = AppModel(api: LegacyAPI(session: URLSession(configuration: configuration)), defaults: defaults)
+        model.catalog = [anime]
+        model.session = UserSession(userID: "previous-account", uniqID: "previous-token", username: "Previous", email: "previous@example.com")
+        let previousSync = Task { await model.syncCloudInBackground() }
+        while !model.isCloudSyncing { await Task.yield() }
+
+        let loggedIn = await model.login(email: "restore@example.com", password: "test-only")
+        await previousSync.value
+
+        XCTAssertTrue(loggedIn)
+        XCTAssertEqual(RestoreFixtureProtocol.downloadRequests, 2)
+        XCTAssertEqual(RestoreFixtureProtocol.uploadRequests, 0)
+        XCTAssertEqual(model.library.category(for: anime), .watchingNow)
+        XCTAssertTrue(defaults.bool(forKey: "cloud.baseline.restore-test"))
+        XCTAssertFalse(defaults.bool(forKey: "cloud.baseline.previous-account"))
+        model.logout()
+    }
+
+    @MainActor
     func testFirstLoginNeverUploadsAnEmptyBackup() async {
-        let userID = "first-sync-test"
-        UserDefaults.standard.removeObject(forKey: "cloud.baseline.\(userID)")
-        UserDefaults.standard.removeObject(forKey: "cloud.dirty.\(userID)")
+        let suite = "AnimeCloudTests.emptyLogin.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
         FirstSyncFixtureProtocol.uploadRequests = 0
 
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [FirstSyncFixtureProtocol.self]
-        let model = AppModel(api: LegacyAPI(session: URLSession(configuration: configuration)))
+        let model = AppModel(api: LegacyAPI(session: URLSession(configuration: configuration)), defaults: defaults)
 
         let loggedIn = await model.login(email: "first@example.com", password: "test-only")
 
         XCTAssertTrue(loggedIn)
         XCTAssertEqual(FirstSyncFixtureProtocol.uploadRequests, 0)
-        XCTAssertTrue(UserDefaults.standard.bool(forKey: "cloud.baseline.\(userID)"))
-        UserDefaults.standard.removeObject(forKey: "cloud.baseline.\(userID)")
-        UserDefaults.standard.removeObject(forKey: "cloud.dirty.\(userID)")
-        UserDefaults.standard.removeObject(forKey: "account.session")
+        XCTAssertTrue(defaults.bool(forKey: "cloud.baseline.first-sync-test"))
+        model.logout()
     }
 
     func testLoginAcceptsCurrentServerAccountIDShape() async throws {
@@ -281,6 +434,55 @@ private final class NewEpisodesFixtureProtocol: URLProtocol {
         let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Data(body.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
+private final class RestoreFixtureProtocol: URLProtocol {
+    static var backup = Data()
+    static var catalog: [Anime] = []
+    static var uploadRequests = 0
+    static var downloadRequests = 0
+    static var downloadDelay: TimeInterval = 0
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        var requestBody = request.httpBody ?? Data()
+        if let stream = request.httpBodyStream {
+            stream.open()
+            defer { stream.close() }
+            var buffer = [UInt8](repeating: 0, count: 4096)
+            while stream.hasBytesAvailable {
+                let count = stream.read(&buffer, maxLength: buffer.count)
+                guard count > 0 else { break }
+                requestBody.append(contentsOf: buffer.prefix(count))
+            }
+        }
+        let body: Data
+        if request.httpMethod == "GET" {
+            Self.downloadRequests += 1
+            body = Self.backup
+        } else if (request.value(forHTTPHeaderField: "Content-Type") ?? "").hasPrefix("multipart/") {
+            Self.uploadRequests += 1
+            body = Data()
+        } else if String(data: requestBody, encoding: .utf8)?.contains("command=getAllAnime") == true {
+            body = try! JSONEncoder().encode(["result": Self.catalog])
+        } else {
+            body = Data(#"{"result":[{"id":"restore-test","uniqid":"session-token","username":"Restore","email":"restore@example.com"},{"status":"true"}]}"#.utf8)
+        }
+        if request.httpMethod == "GET", Self.downloadDelay > 0 {
+            DispatchQueue.global().asyncAfter(deadline: .now() + Self.downloadDelay) { self.respond(body) }
+        } else {
+            respond(body)
+        }
+    }
+
+    private func respond(_ body: Data) {
+        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: body)
         client?.urlProtocolDidFinishLoading(self)
     }
     override func stopLoading() {}

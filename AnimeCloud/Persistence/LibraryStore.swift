@@ -38,6 +38,25 @@ final class LibraryStore: ObservableObject {
     func category(for anime: Anime) -> LibraryCategory? { libraryCategories[anime.id] }
     func isSeen(_ episode: Episode) -> Bool { seenEpisodeIDs.contains(episode.id) }
 
+    func recordPlayback(of episode: Episode, anime: Anime, episodes: [Episode], position: TimeInterval, duration: TimeInterval) {
+        guard position.isFinite, duration.isFinite, duration > 0, position / duration >= 0.5 else { return }
+        if position / duration >= 0.9 { markSeen(episode, anime: anime) }
+        updatePlaybackCategory(for: anime, episodes: episodes)
+    }
+
+    func completePlayback(of episode: Episode, anime: Anime, episodes: [Episode]) {
+        markSeen(episode, anime: anime)
+        updatePlaybackCategory(for: anime, episodes: episodes)
+    }
+
+    private func updatePlaybackCategory(for anime: Anime, episodes: [Episode]) {
+        // The catalog returns episodes newest first; trailing filler is optional.
+        let lastCanonEpisode = episodes.first { !$0.isFiller }
+        let isFinished = anime.isCompleted && lastCanonEpisode.map { isSeen($0) } == true
+        let category: LibraryCategory = isFinished ? .watched : .watchingNow
+        if self.category(for: anime) != category { setCategory(category, for: anime) }
+    }
+
     func toggleFavorite(_ anime: Anime) {
         setCategory(isFavorite(anime) ? nil : .favorites, for: anime)
     }

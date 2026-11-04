@@ -38,6 +38,12 @@ struct Anime: Codable, Identifiable, Hashable, Sendable {
     var latestEpisodeName: String?
 
     var imageURL: URL? { image.flatMap(URL.init(string:)) }
+    var isCompleted: Bool {
+        guard let status else { return false }
+        if status.contains("مستمر") || status.localizedCaseInsensitiveContains("ongoing") { return false }
+        return status.contains("مكتمل") || status.localizedCaseInsensitiveContains("complete")
+            || status.localizedCaseInsensitiveContains("finished")
+    }
     var subtitle: String { [year, status].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " • ") }
 
     enum CodingKeys: String, CodingKey {
