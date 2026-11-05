@@ -242,6 +242,11 @@ private struct EpisodeRow: View {
             HStack(spacing: 13) {
                 RemoteArtwork(url: episode.imageURL)
                     .frame(width: 120, height: 72)
+                    .overlay(alignment: .topLeading) {
+                        if episode.isFiller {
+                            EpisodeTypeBadge(episode: episode).padding(6)
+                        }
+                    }
                     .overlay(alignment: .bottomLeading) {
                         if displayedIsSeen {
                             Label("Watched", systemImage: "checkmark.circle.fill")
@@ -265,7 +270,6 @@ private struct EpisodeRow: View {
                             Label(displayedIsSeen ? "Watch again" : "Ready to play", systemImage: displayedIsSeen ? "arrow.counterclockwise" : "play.circle")
                                 .font(.caption).foregroundStyle(CloudTheme.muted)
                         }
-                        EpisodeTypeBadge(episode: episode)
                     }
                     if let progress = progressStore.progress(for: episode.id) {
                         ProgressView(value: progress.fraction)
@@ -278,7 +282,7 @@ private struct EpisodeRow: View {
             .contentShape(Rectangle())
             .onTapGesture(perform: onOpen)
             .accessibilityElement(children: .combine)
-            .accessibilityValue(displayedIsSeen ? "Watched" : "Unwatched")
+            .accessibilityValue("\(displayedIsSeen ? "Watched" : "Unwatched"), \(episode.episodeTypeLabel) episode")
             .accessibilityAddTraits(.isButton)
             .accessibilityAction { onOpen() }
 
@@ -770,14 +774,22 @@ private struct EpisodeTypeBadge: View {
     let episode: Episode
 
     var body: some View {
-        Image(systemName: episode.isFiller ? "wand.and.stars" : "checkmark.seal.fill")
-        .font(.caption.weight(.black))
-        .foregroundStyle(episode.isFiller ? CloudTheme.coral : CloudTheme.cyan)
-        .frame(width: 26, height: 26)
-        .background((episode.isFiller ? CloudTheme.coral : CloudTheme.cyan).opacity(0.14), in: Circle())
-        .overlay {
-            Circle().stroke((episode.isFiller ? CloudTheme.coral : CloudTheme.cyan).opacity(0.28), lineWidth: 1)
+        if episode.isFiller {
+            Label("Filler", systemImage: "sparkles")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(CloudTheme.ink)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(Color.orange, in: Capsule())
+                .accessibilityLabel("Filler episode")
+        } else {
+            Image(systemName: "checkmark.seal.fill")
+                .font(.caption.weight(.black))
+                .foregroundStyle(CloudTheme.cyan)
+                .frame(width: 26, height: 26)
+                .background(CloudTheme.cyan.opacity(0.14), in: Circle())
+                .overlay { Circle().stroke(CloudTheme.cyan.opacity(0.28), lineWidth: 1) }
+                .accessibilityLabel("Canon episode")
         }
-        .accessibilityLabel(episode.isFiller ? "Filler episode" : "Canon episode")
     }
 }
