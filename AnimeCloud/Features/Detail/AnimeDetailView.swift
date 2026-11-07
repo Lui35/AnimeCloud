@@ -3,19 +3,28 @@ import AVFAudio
 import SwiftUI
 
 struct AnimeDetailView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var model: AppModel
     let anime: Anime
     let library: LibraryStore
     @State private var detail: AnimeDetail?
     @State private var isLoading = true
     @State private var selectedEpisode: Episode?
+    @State private var navigationVisibility = ScrollAwareNavigationVisibility()
 
     var body: some View {
         ZStack {
             CloudBackground()
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    hero
+                    hero.background {
+                        GeometryReader { proxy in
+                            Color.clear.preference(
+                                key: AnimeDetailScrollOffsetKey.self,
+                                value: proxy.frame(in: .named("animeDetailScroll")).minY
+                            )
+                        }
+                    }
                     if isLoading { ProgressView("Loading episodes…").frame(maxWidth: .infinity).padding(50) }
                     if let detail {
                         metadata(detail)
@@ -25,8 +34,11 @@ struct AnimeDetailView: View {
                 }
                 .padding(.bottom, 80)
             }
+            .coordinateSpace(name: "animeDetailScroll")
+            .onPreferenceChange(AnimeDetailScrollOffsetKey.self, perform: updateNavigationVisibility)
         }
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(navigationVisibility.isVisible ? .visible : .hidden, for: .navigationBar)
         .toolbarBackground(.hidden, for: .navigationBar)
         .task { await load() }
         .sheet(item: $selectedEpisode) { episode in
@@ -120,6 +132,47 @@ struct AnimeDetailView: View {
             model.applyAniListProgress(to: anime, episodes: episodes)
         }
         isLoading = false
+    }
+
+    private func updateNavigationVisibility(for offset: CGFloat) {
+        var next = navigationVisibility
+        next.update(offset: offset)
+        guard next.isVisible != navigationVisibility.isVisible else {
+            navigationVisibility = next
+            return
+        }
+        if reduceMotion {
+            navigationVisibility = next
+        } else {
+            withAnimation(.snappy(duration: 0.22)) { navigationVisibility = next }
+        }
+    }
+}
+
+private struct AnimeDetailScrollOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+struct ScrollAwareNavigationVisibility: Equatable {
+    private(set) var isVisible = true
+    private var referenceOffset: CGFloat?
+
+    mutating func update(offset: CGFloat) {
+        guard offset.isFinite else { return }
+        guard let referenceOffset else {
+            self.referenceOffset = offset
+            return
+        }
+        if offset >= -12 {
+            isVisible = true
+            self.referenceOffset = offset
+            return
+        }
+        let delta = offset - referenceOffset
+        guard abs(delta) >= 8 else { return }
+        isVisible = delta > 0
+        self.referenceOffset = offset
     }
 }
 
@@ -363,6 +416,8 @@ private struct PlayerSheet: View {
                             ZStack {
                                 Anime4KVideoPlayer(player: player, preset: preset)
                                     .id(anime4KMode.rawValue)
+                                    .contentShape(Rectangle())
+                                    .gesture(verticalFullscreenGesture(isFullscreen: false))
                                 EnhancedVideoControls(
                                     player: player,
                                     isFullscreen: false,
@@ -370,7 +425,8 @@ private struct PlayerSheet: View {
                                     hideControls: nil,
                                     anime4KMode: nil,
                                     selectAnime4KMode: nil,
-                                    runAnime4KBenchmark: nil
+                                    runAnime4KBenchmark: nil,
+                                    onInteraction: {}
                                 )
                             }
                             .ignoresSafeArea(edges: .horizontal)
@@ -457,6 +513,16 @@ private struct PlayerSheet: View {
     private func runAnime4KBenchmark() {
         guard let player else { return }
         anime4KBenchmark.start(player: player)
+    }
+
+    private func verticalFullscreenGesture(isFullscreen: Bool) -> some Gesture {
+        DragGesture(minimumDistance: 30).onEnded { value in
+            guard PlayerFullscreenGesture.action(
+                for: value.translation,
+                isFullscreen: isFullscreen
+            ) == .enter else { return }
+            isAnime4KFullscreen = true
+        }
     }
 
     private func closePlayer() {
@@ -657,11 +723,13 @@ private struct PlayerSheet: View {
 }
 
 private struct Anime4KFullscreenPlayer: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let player: AVPlayer
     @Binding var modeRawValue: String
     @ObservedObject var benchmark: Anime4KBenchmarkController
     @Binding var isPresented: Bool
     @State private var controlsAreVisible = true
+    @State private var controlHideTask: Task<Void, Never>?
 
     var body: some View {
         ZStack {
@@ -678,6 +746,7 @@ private struct Anime4KFullscreenPlayer: View {
                 .ignoresSafeArea()
                 .contentShape(Rectangle())
                 .onTapGesture { toggleControls() }
+                .gesture(verticalFullscreenGesture)
             }
             if controlsAreVisible && !benchmark.isRunning && benchmark.report == nil {
                 EnhancedVideoControls(
@@ -687,7 +756,8 @@ private struct Anime4KFullscreenPlayer: View {
                     hideControls: { hideControls() },
                     anime4KMode: mode,
                     selectAnime4KMode: selectMode,
-                    runAnime4KBenchmark: runBenchmark
+                    runAnime4KBenchmark: runBenchmark,
+                    onInteraction: scheduleControlFade
                 )
                 .ignoresSafeArea(edges: .horizontal)
                 .transition(.opacity)
@@ -697,11 +767,17 @@ private struct Anime4KFullscreenPlayer: View {
                 applyMode: selectMode
             )
         }
-        .animation(.easeInOut(duration: 0.18), value: controlsAreVisible)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: controlsAreVisible)
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
-        .onAppear { PlaybackOrientation.request(.landscape) }
-        .onDisappear { PlaybackOrientation.request(.portrait) }
+        .onAppear {
+            PlaybackOrientation.request(.landscape)
+            scheduleControlFade()
+        }
+        .onDisappear {
+            controlHideTask?.cancel()
+            PlaybackOrientation.request(.portrait)
+        }
     }
 
     private var mode: Anime4KPlaybackMode {
@@ -717,11 +793,53 @@ private struct Anime4KFullscreenPlayer: View {
     }
 
     private func toggleControls() {
-        controlsAreVisible.toggle()
+        if controlsAreVisible {
+            hideControls()
+        } else {
+            controlsAreVisible = true
+            scheduleControlFade()
+        }
     }
 
     private func hideControls() {
+        controlHideTask?.cancel()
         controlsAreVisible = false
+    }
+
+    private func scheduleControlFade() {
+        controlHideTask?.cancel()
+        guard controlsAreVisible else { return }
+        controlHideTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            controlsAreVisible = false
+        }
+    }
+
+    private var verticalFullscreenGesture: some Gesture {
+        DragGesture(minimumDistance: 30).onEnded { value in
+            guard PlayerFullscreenGesture.action(
+                for: value.translation,
+                isFullscreen: true
+            ) == .exit else { return }
+            isPresented = false
+        }
+    }
+}
+
+enum PlayerFullscreenGestureAction: Equatable {
+    case enter
+    case exit
+}
+
+enum PlayerFullscreenGesture {
+    static func action(for translation: CGSize, isFullscreen: Bool) -> PlayerFullscreenGestureAction? {
+        guard abs(translation.height) >= 70,
+              abs(translation.height) > abs(translation.width) * 1.25
+        else { return nil }
+        if translation.height < 0, !isFullscreen { return .enter }
+        if translation.height > 0, isFullscreen { return .exit }
+        return nil
     }
 }
 

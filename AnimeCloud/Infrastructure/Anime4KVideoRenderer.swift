@@ -695,6 +695,7 @@ struct EnhancedVideoControls: View {
     let anime4KMode: Anime4KPlaybackMode?
     let selectAnime4KMode: ((Anime4KPlaybackMode) -> Void)?
     let runAnime4KBenchmark: (() -> Void)?
+    let onInteraction: () -> Void
     @State private var isPlaying = true
     @State private var currentTime = 0.0
     @State private var duration = 0.0
@@ -769,6 +770,10 @@ struct EnhancedVideoControls: View {
         }
         .onAppear(perform: installTimeObserver)
         .onDisappear(perform: removeTimeObserver)
+        .simultaneousGesture(TapGesture().onEnded(onInteraction))
+        .onChange(of: currentTime) { _, _ in
+            if isScrubbing { onInteraction() }
+        }
     }
 
     private func installTimeObserver() {
@@ -807,6 +812,7 @@ struct EnhancedVideoControls: View {
     }
 
     private func scrubStateChanged(_ editing: Bool) {
+        onInteraction()
         isScrubbing = editing
         guard !editing else { return }
         player.seek(to: CMTime(seconds: currentTime, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)

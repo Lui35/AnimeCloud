@@ -2,6 +2,41 @@ import XCTest
 @testable import AnimeCloud
 
 final class AnimeCloudTests: XCTestCase {
+    func testDetailNavigationFollowsMeaningfulScrollDirection() {
+        var visibility = ScrollAwareNavigationVisibility()
+
+        visibility.update(offset: 0)
+        visibility.update(offset: -5)
+        XCTAssertTrue(visibility.isVisible, "Small scroll movement should not flicker the back button")
+
+        visibility.update(offset: -20)
+        XCTAssertFalse(visibility.isVisible)
+
+        visibility.update(offset: -15)
+        XCTAssertFalse(visibility.isVisible, "Small direction changes should not flicker the back button")
+        visibility.update(offset: -8)
+        XCTAssertTrue(visibility.isVisible, "Scrolling upward should restore navigation")
+
+        visibility.update(offset: -30)
+        XCTAssertFalse(visibility.isVisible)
+        visibility.update(offset: -10)
+        XCTAssertTrue(visibility.isVisible, "Navigation should always be visible near the top")
+    }
+
+    func testPlayerFullscreenGestureRequiresDeliberateVerticalSwipe() {
+        XCTAssertEqual(
+            PlayerFullscreenGesture.action(for: CGSize(width: 5, height: -90), isFullscreen: false),
+            .enter
+        )
+        XCTAssertEqual(
+            PlayerFullscreenGesture.action(for: CGSize(width: 5, height: 90), isFullscreen: true),
+            .exit
+        )
+        XCTAssertNil(PlayerFullscreenGesture.action(for: CGSize(width: 0, height: 40), isFullscreen: false))
+        XCTAssertNil(PlayerFullscreenGesture.action(for: CGSize(width: 90, height: -70), isFullscreen: false))
+        XCTAssertNil(PlayerFullscreenGesture.action(for: CGSize(width: 0, height: 90), isFullscreen: false))
+    }
+
     @MainActor
     func testSQLiteBackupRoundTripAndRemovalTombstone() throws {
         let sourceDefaults = UserDefaults(suiteName: "AnimeCloudTests.source.\(UUID())")!
