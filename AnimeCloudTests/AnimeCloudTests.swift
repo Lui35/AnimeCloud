@@ -2,6 +2,30 @@ import XCTest
 @testable import AnimeCloud
 
 final class AnimeCloudTests: XCTestCase {
+    @MainActor
+    func testLeavingDiscoverKeepsOneSharedCatalogRequest() async {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [DelayedCatalogFixtureProtocol.self]
+        let suite = "AnimeCloudTests.catalog.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let started = expectation(description: "Catalog request started")
+        started.assertForOverFulfill = true
+        DelayedCatalogFixtureProtocol.requestStarted = started
+        defer { DelayedCatalogFixtureProtocol.requestStarted = nil }
+        let model = AppModel(api: LegacyAPI(session: URLSession(configuration: configuration)), defaults: defaults)
+
+        let discover = Task { await model.loadCatalog() }
+        await fulfillment(of: [started], timeout: 5)
+        discover.cancel()
+        await model.loadCatalog()
+        await discover.value
+
+        XCTAssertEqual(model.catalog.map(\.name), ["One Piece"])
+        XCTAssertFalse(model.isCatalogLoading)
+        XCTAssertNil(model.message)
+    }
+
     func testDetailNavigationFollowsMeaningfulScrollDirection() {
         var visibility = ScrollAwareNavigationVisibility()
 
@@ -387,6 +411,74 @@ final class AnimeCloudTests: XCTestCase {
     }
 
     @MainActor
+    func testRemovingRestoredDownloadKeepsResumeAndWatchedState() throws {
+        let suite = "AnimeCloudTests.downloads.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        let directory = FileManager.default.temporaryDirectory.appending(path: suite)
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let anime = Anime(id: "anime", name: "Series")
+        let episode = Episode(id: "episode", name: "Episode 2")
+        let record = EpisodeDownload(anime: anime, episode: episode, catalogPosition: 2,
+                                     finalCanonEpisode: nil, status: .ready, relativePath: "episode.mp4")
+        let file = directory.appending(path: "episode.mp4")
+        try Data([0]).write(to: file)
+        defaults.set(try JSONEncoder().encode([record.id: record]), forKey: "downloads.episodes")
+        let progress = PlaybackProgressStore(defaults: defaults)
+        progress.save(episodeID: episode.id, position: 754, duration: 1_500)
+        LibraryStore(defaults: defaults).markSeen(episode, anime: anime)
+
+        let downloads = EpisodeDownloads(api: .live, defaults: defaults, directory: directory)
+        XCTAssertEqual(downloads.localURL(for: episode.id), file)
+        try downloads.remove(episode.id)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+        XCTAssertTrue(EpisodeDownloads(api: .live, defaults: defaults, directory: directory).records.isEmpty)
+        XCTAssertEqual(PlaybackProgressStore(defaults: defaults).progress(for: episode.id)?.position, 754)
+        XCTAssertTrue(LibraryStore(defaults: defaults).isSeen(episode))
+    }
+
+    @MainActor
+    func testCloudUploadKeepsNewerWatchChangesPending() async throws {
+        let suite = "AnimeCloudTests.uploadRevision.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer {
+            RestoreFixtureProtocol.beforeFirstUploadResponse = nil
+            RestoreFixtureProtocol.backup = Data()
+            defaults.removePersistentDomain(forName: suite)
+        }
+        RestoreFixtureProtocol.uploadRequests = 0
+        RestoreFixtureProtocol.backup = try LibraryStore(defaults: defaults).backupData()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [RestoreFixtureProtocol.self]
+        let model = AppModel(api: LegacyAPI(session: URLSession(configuration: configuration)), defaults: defaults)
+        let loggedIn = await model.login(email: "restore@example.com", password: "test-only")
+        XCTAssertTrue(loggedIn)
+        defer { model.logout() }
+
+        let anime = Anime(id: "anime", name: "Series")
+        let first = Episode(id: "first", name: "Episode 1")
+        let second = Episode(id: "second", name: "Episode 2")
+        model.library.markSeen(first, anime: anime)
+        RestoreFixtureProtocol.beforeFirstUploadResponse = { respond in
+            Task { @MainActor in
+                model.library.markSeen(second, anime: anime)
+                respond()
+            }
+        }
+
+        await model.retryPendingWatchSync()
+        XCTAssertTrue(model.hasPendingCloudChanges)
+        XCTAssertTrue(model.library.isSeen(second))
+        await model.retryPendingWatchSync()
+        XCTAssertFalse(model.hasPendingCloudChanges)
+        XCTAssertEqual(RestoreFixtureProtocol.uploadRequests, 2)
+    }
+
+    @MainActor
     func testPlaybackProgressPersistsAndClearsNearCompletion() {
         let suiteName = "AnimeCloudTests.progress.\(UUID())"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -402,6 +494,25 @@ final class AnimeCloudTests: XCTestCase {
         restored.save(episodeID: "episode-1", position: 1_430, duration: 1_500)
         XCTAssertNil(restored.progress(for: "episode-1"))
     }
+}
+
+private final class DelayedCatalogFixtureProtocol: URLProtocol {
+    static var requestStarted: XCTestExpectation?
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        Self.requestStarted?.fulfill()
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.25) {
+            let response = HTTPURLResponse(url: self.request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            self.client?.urlProtocol(self, didLoad: Data(#"{"result":[{"id":"1","name":"One Piece"}]}"#.utf8))
+            self.client?.urlProtocolDidFinishLoading(self)
+        }
+    }
+
+    override func stopLoading() {}
 }
 
 private final class LoginFixtureProtocol: URLProtocol {
@@ -480,6 +591,7 @@ private final class RestoreFixtureProtocol: URLProtocol {
     static var uploadRequests = 0
     static var downloadRequests = 0
     static var downloadDelay: TimeInterval = 0
+    static var beforeFirstUploadResponse: ((@escaping () -> Void) -> Void)?
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
@@ -501,6 +613,10 @@ private final class RestoreFixtureProtocol: URLProtocol {
             body = Self.backup
         } else if (request.value(forHTTPHeaderField: "Content-Type") ?? "").hasPrefix("multipart/") {
             Self.uploadRequests += 1
+            if Self.uploadRequests == 1, let beforeResponse = Self.beforeFirstUploadResponse {
+                beforeResponse { self.respond(Data()) }
+                return
+            }
             body = Data()
         } else if String(data: requestBody, encoding: .utf8)?.contains("command=getAllAnime") == true {
             body = try! JSONEncoder().encode(["result": Self.catalog])

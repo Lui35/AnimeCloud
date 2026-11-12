@@ -234,8 +234,14 @@ final class AniListSyncManager: ObservableObject {
         status = "Not connected"
     }
 
+    var hasPendingChanges: Bool {
+        account.map { defaults.bool(forKey: dirtyKey($0.id)) } ?? false
+    }
+
     func markDirty() {
         guard let account else { return }
+        let key = revisionKey(account.id)
+        defaults.set(defaults.integer(forKey: key) + 1, forKey: key)
         defaults.set(true, forKey: dirtyKey(account.id))
         status = "Waiting to sync changes"
     }
@@ -283,6 +289,7 @@ final class AniListSyncManager: ObservableObject {
             return
         }
 
+        let revision = defaults.integer(forKey: revisionKey(viewer.id))
         status = "Uploading Anime Cloud progress…"
         let known = Dictionary(uniqueKeysWithValues: candidates.map { ($0.id, $0) })
         let animeIDs = Set(library.libraryCategories.keys).union(library.watchedAnimeIDs)
@@ -294,8 +301,11 @@ final class AniListSyncManager: ObservableObject {
             guard let mediaID = try await mediaID(for: anime, token: token) else { continue }
             try await client.save(mediaID: mediaID, status: status, progress: progress, token: token)
         }
-        defaults.set(false, forKey: dirtyKey(viewer.id))
-        status = "Synced just now"
+        guard account?.id == viewer.id, AniListTokenStore.load() == token else { return }
+        if defaults.integer(forKey: revisionKey(viewer.id)) == revision {
+            defaults.set(false, forKey: dirtyKey(viewer.id))
+        }
+        status = hasPendingChanges ? "Waiting to sync changes" : "Synced just now"
         persistMappings()
     }
 
@@ -366,6 +376,7 @@ final class AniListSyncManager: ObservableObject {
     }
 
     private func baselineKey(_ userID: Int) -> String { "anilist.baseline.\(userID)" }
+    private func revisionKey(_ userID: Int) -> String { "anilist.revision.\(userID)" }
     private func dirtyKey(_ userID: Int) -> String { "anilist.dirty.\(userID)" }
 }
 
