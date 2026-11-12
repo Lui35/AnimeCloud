@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct AnimeCloudApp: App {
+    @UIApplicationDelegateAdaptor(DownloadAppDelegate.self) private var downloadDelegate
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var model = AppModel.live
     @State private var isLaunching = true
@@ -21,6 +22,8 @@ struct AnimeCloudApp: App {
             .preferredColorScheme(.dark)
             .task {
                 guard isLaunching else { return }
+                model.monitorConnectivity()
+                Task { await model.downloads.restoreTransfers() }
                 Task { await model.bootstrap() }
                 try? await Task.sleep(for: .seconds(1.65))
 
@@ -35,5 +38,12 @@ struct AnimeCloudApp: App {
                 Task { await model.syncCloudInBackground() }
             }
         }
+    }
+}
+
+final class DownloadAppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String,
+                     completionHandler: @escaping () -> Void) {
+        AppModel.live.downloads.handleBackgroundEvents(identifier: identifier, completion: completionHandler)
     }
 }

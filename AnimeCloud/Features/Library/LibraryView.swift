@@ -3,15 +3,34 @@ import SwiftUI
 struct LibraryView: View {
     @EnvironmentObject private var model: AppModel
     @ObservedObject var store: LibraryStore
-    @State private var selection: LibraryCategory = .favorites
+    let isActive: Bool
+    @AppStorage("library.defaultCategory") private var defaultCategory: LibraryCategory = .watchingNow
+    @State private var selection: LibraryCategory = .watchingNow
 
     private let columns = [GridItem(.adaptive(minimum: 145), spacing: 16)]
+    private let categories: [LibraryCategory] = [.watchingNow, .watchLater, .watched, .favorites]
 
     var body: some View {
         NavigationStack {
             ZStack {
                 CloudBackground()
                 VStack(spacing: 16) {
+                    NavigationLink {
+                        DownloadsView(downloads: model.downloads)
+                    } label: {
+                        HStack {
+                            Label("Downloads", systemImage: "arrow.down.circle")
+                                .font(.headline)
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+                        }
+                        .foregroundStyle(CloudTheme.cyan)
+                        .padding(.horizontal, 16)
+                        .frame(minHeight: 48)
+                        .cloudPanel()
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 18)
                     categorySelector
                     if items.isEmpty {
                         EmptyCloud(title: emptyTitle, detail: emptyDetail, systemImage: selection.icon)
@@ -40,26 +59,51 @@ struct LibraryView: View {
     }
 
     private var categorySelector: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 9) {
-                ForEach(LibraryCategory.allCases) { category in
-                    Button { withAnimation(.easeInOut(duration: 0.2)) { selection = category } } label: {
-                        HStack(spacing: 7) {
-                            Image(systemName: category.icon)
-                            Text(category.title)
-                            Text(String(count(for: category)))
-                                .font(.caption2.bold())
-                                .padding(.horizontal, 6).padding(.vertical, 3)
-                                .background(Color.white.opacity(0.12), in: Capsule())
-                        }
-                        .font(.subheadline.weight(.semibold))
-                        .padding(.horizontal, 13).padding(.vertical, 10)
-                        .background(selection == category ? AnyShapeStyle(CloudTheme.heroGradient) : AnyShapeStyle(CloudTheme.panel), in: Capsule())
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 9) {
+                    ForEach(categories) { category in
+                        categoryButton(category).id(category)
                     }
-                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 18)
+            }
+            .onChange(of: isActive, initial: true) { _, active in
+                guard active else { return }
+                selection = defaultCategory
+                proxy.scrollTo(defaultCategory)
+            }
+        }
+    }
+
+    private func categoryButton(_ category: LibraryCategory) -> some View {
+        Button { withAnimation(.easeInOut(duration: 0.2)) { selection = category } } label: {
+            HStack(spacing: 7) {
+                Image(systemName: category.icon)
+                Text(category.title)
+                Text(String(count(for: category)))
+                    .font(.caption2.bold())
+                    .padding(.horizontal, 6).padding(.vertical, 3)
+                    .background(Color.white.opacity(0.12), in: Capsule())
+            }
+            .font(.subheadline.weight(.semibold))
+            .padding(.horizontal, 12)
+            .frame(minHeight: 44)
+            .contentShape(Capsule())
+            .background(selection == category ? AnyShapeStyle(CloudTheme.heroGradient) : AnyShapeStyle(CloudTheme.panel), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selection == category ? .isSelected : [])
+        .contextMenu {
+            if category == defaultCategory {
+                Button("Default category", systemImage: "checkmark") {}
+                    .disabled(true)
+            } else {
+                Button("Mark as Default", systemImage: "star") {
+                    defaultCategory = category
+                    selection = category
                 }
             }
-            .padding(.horizontal, 18)
         }
     }
 

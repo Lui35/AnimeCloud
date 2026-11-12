@@ -17,6 +17,7 @@
 		5FA8106BDD5197935E4A4183 /* AniListService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7469F355B89BCAD15B234389 /* AniListService.swift */; };
 		62535061A530AFAC99182D61 /* AnimeCloudApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8017B8CE5B3DF8BE3075471A /* AnimeCloudApp.swift */; };
 		66AD20915157D35F5F6BADAA /* Anime4KVideoRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DE6BCD47DD2645DF72D2478 /* Anime4KVideoRenderer.swift */; };
+		A11000000000000000000002 /* EpisodeDownloads.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11000000000000000000001 /* EpisodeDownloads.swift */; };
 		7F6C4D930A6F9BD89E1F62CE /* ScheduleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 551D83A5E1DE2489310F0230 /* ScheduleView.swift */; };
 		835CC8D7DE43AE435307B2B8 /* PosterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C230C5F7B2FF684AEB02DAEF /* PosterView.swift */; };
 		89F5C0252CD63B15CF4077DB /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C302B66ADBB01005C16AB043 /* ProfileView.swift */; };
@@ -25,6 +26,7 @@
 		A06CBECDDDE20926E4BF6CC2 /* PlaybackProgressStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CF7195AF672B77A146E76DD /* PlaybackProgressStore.swift */; };
 		A63C0D95FB0E38E54FC11AB0 /* LibrarySaveMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7171E5903EE32DB865A5D2E7 /* LibrarySaveMenu.swift */; };
 		AB12AE618C343E9C6DF09647 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B729A9602F5795490F17E1F7 /* LibraryView.swift */; };
+		A11000000000000000000004 /* DownloadsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11000000000000000000003 /* DownloadsView.swift */; };
 		B6675066E24D51F9555CA7BA /* CloudTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4279235A7B1620766FD11AFD /* CloudTheme.swift */; };
 		BF46C3E211BA5BEB2A88E1E1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B4AFE7B69E69E3D607416C79 /* Assets.xcassets */; };
 		C48097498D9BA9498A6D62F1 /* LegacyAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB3B4E176151881D81A6D604 /* LegacyAPI.swift */; };
@@ -48,6 +50,7 @@
 		0AD837FD36D33171A3C1BF87 /* GroundedDiscoveryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroundedDiscoveryService.swift; sourceTree = "<group>"; };
 		0DB67BB9EB8DAF4FD1C68540 /* AnimeCloudTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimeCloudTests.swift; sourceTree = "<group>"; };
 		0DE6BCD47DD2645DF72D2478 /* Anime4KVideoRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Anime4KVideoRenderer.swift; sourceTree = "<group>"; };
+		A11000000000000000000001 /* EpisodeDownloads.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpisodeDownloads.swift; sourceTree = "<group>"; };
 		23FC15825EC51D2C1601CD50 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		2422096CD942F6DB97F00B3A /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		3F55B0CE206B3F38661D4C2C /* DiscoveryAssistantView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryAssistantView.swift; sourceTree = "<group>"; };
@@ -67,6 +70,7 @@
 		AB3B4E176151881D81A6D604 /* LegacyAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyAPI.swift; sourceTree = "<group>"; };
 		B4AFE7B69E69E3D607416C79 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B729A9602F5795490F17E1F7 /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
+		A11000000000000000000003 /* DownloadsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadsView.swift; sourceTree = "<group>"; };
 		BC10E1E0A5A321C51718CE97 /* LaunchExperienceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchExperienceView.swift; sourceTree = "<group>"; };
 		C0110E02442B6EDA2D078B28 /* AnimeCloudTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = AnimeCloudTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C230C5F7B2FF684AEB02DAEF /* PosterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PosterView.swift; sourceTree = "<group>"; };
@@ -167,6 +171,7 @@
 			isa = PBXGroup;
 			children = (
 				B729A9602F5795490F17E1F7 /* LibraryView.swift */,
+				A11000000000000000000003 /* DownloadsView.swift */,
 			);
 			path = Library;
 			sourceTree = "<group>";
@@ -259,6 +264,7 @@
 			isa = PBXGroup;
 			children = (
 				0DE6BCD47DD2645DF72D2478 /* Anime4KVideoRenderer.swift */,
+				A11000000000000000000001 /* EpisodeDownloads.swift */,
 				CDD11B80AC2DB8CC72EA032A /* CryptoBridge.h */,
 				F1670222E8A7E5CF603C0A0E /* RNCryptorPlaybackDecryptor.swift */,
 			);
@@ -376,6 +382,7 @@
 			files = (
 				5FA8106BDD5197935E4A4183 /* AniListService.swift in Sources */,
 				66AD20915157D35F5F6BADAA /* Anime4KVideoRenderer.swift in Sources */,
+				A11000000000000000000002 /* EpisodeDownloads.swift in Sources */,
 				62535061A530AFAC99182D61 /* AnimeCloudApp.swift in Sources */,
 				3EE7F73324406D2FD871F007 /* AnimeDetailView.swift in Sources */,
 				E22DD67D1E46DD70B229F288 /* AppModel.swift in Sources */,
@@ -389,6 +396,7 @@
 				A63C0D95FB0E38E54FC11AB0 /* LibrarySaveMenu.swift in Sources */,
 				4B905ADE12E1496C7CE2B931 /* LibraryStore.swift in Sources */,
 				AB12AE618C343E9C6DF09647 /* LibraryView.swift in Sources */,
+				A11000000000000000000004 /* DownloadsView.swift in Sources */,
 				42475837307BB4ACADB3B50B /* Models.swift in Sources */,
 				A06CBECDDDE20926E4BF6CC2 /* PlaybackProgressStore.swift in Sources */,
 				835CC8D7DE43AE435307B2B8 /* PosterView.swift in Sources */,

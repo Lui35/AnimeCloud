@@ -6,10 +6,11 @@ struct PosterView: View {
     let anime: Anime
     var width: CGFloat = 142
     var height: CGFloat = 204
+    var cachedArtworkURL: URL?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
-            RemoteArtwork(url: anime.imageURL)
+            RemoteArtwork(url: cachedArtworkURL ?? anime.imageURL)
                 .frame(width: width, height: height)
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .overlay(alignment: .topTrailing) {
@@ -39,6 +40,7 @@ struct PosterView: View {
 
 struct RemoteArtwork: View {
     let url: URL?
+    var fallbackFileURL: URL?
     @Environment(\.displayScale) private var displayScale
     @State private var phase: ArtworkPhase = .empty
     @State private var reloadToken = 0
@@ -66,16 +68,22 @@ struct RemoteArtwork: View {
                 .resizable()
                 .scaledToFill()
                 .transition(.opacity)
-        case .failure:
-            placeholder
-                .overlay(alignment: .bottom) {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.caption.bold())
-                        .foregroundStyle(.white.opacity(0.55))
-                        .padding(8)
+        case .failure, .empty:
+            if let path = fallbackFileURL?.path, let image = UIImage(contentsOfFile: path) {
+                Image(uiImage: image).resizable().scaledToFill()
+            } else {
+                placeholder.overlay(alignment: .bottom) {
+                    if phase.isFailure {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.caption.bold())
+                            .foregroundStyle(.white.opacity(0.55))
+                            .padding(8)
+                    }
                 }
-        case .empty:
-            placeholder.overlay { ProgressView().tint(.white.opacity(0.7)) }
+                .overlay {
+                    if !phase.isFailure { ProgressView().tint(.white.opacity(0.7)) }
+                }
+            }
         }
     }
 
@@ -91,6 +99,10 @@ struct RemoteArtwork: View {
     @MainActor private func load(size: CGSize) async {
         guard let url else {
             phase = .failure
+            return
+        }
+        if url.isFileURL {
+            phase = UIImage(contentsOfFile: url.path).map(ArtworkPhase.success) ?? .failure
             return
         }
         phase = .empty
@@ -137,7 +149,7 @@ private enum ArtworkError: Error {
     case invalidImage
 }
 
-private actor ArtworkPipeline {
+actor ArtworkPipeline {
     static let shared = ArtworkPipeline()
     static let didLoadImage = Notification.Name("AnimeCloud.ArtworkPipeline.didLoadImage")
 

@@ -10,6 +10,7 @@ struct AnimeDetailView: View {
     @State private var detail: AnimeDetail?
     @State private var isLoading = true
     @State private var selectedEpisode: Episode?
+    @State private var showingDownloadSelection = false
     @State private var navigationVisibility = ScrollAwareNavigationVisibility()
 
     var body: some View {
@@ -41,6 +42,9 @@ struct AnimeDetailView: View {
         .toolbar(navigationVisibility.isVisible ? .visible : .hidden, for: .navigationBar)
         .toolbarBackground(.hidden, for: .navigationBar)
         .task { await load() }
+        .sheet(isPresented: $showingDownloadSelection) {
+            DownloadSelectionView(downloads: model.downloads, anime: anime, catalog: detail?.episodes ?? [])
+        }
         .sheet(item: $selectedEpisode) { episode in
             PlayerSheet(
                 anime: anime,
@@ -53,34 +57,28 @@ struct AnimeDetailView: View {
     }
 
     private var hero: some View {
-        ZStack(alignment: .bottom) {
-            RemoteArtwork(url: anime.imageURL).frame(height: 430)
-            LinearGradient(colors: [.clear, CloudTheme.ink.opacity(0.5), CloudTheme.ink], startPoint: .top, endPoint: .bottom)
-            VStack(spacing: 14) {
-                Text(anime.name).font(.system(size: 32, weight: .black, design: .rounded)).multilineTextAlignment(.center)
-                Text(anime.subtitle).font(.subheadline).foregroundStyle(CloudTheme.muted)
-                HStack(spacing: 12) {
-                    if let first = detail?.episodes.last {
-                        Button { selectedEpisode = first } label: { Label("Start watching", systemImage: "play.fill") }
-                            .buttonStyle(PrimaryCapsuleStyle())
-                    }
-                    LibrarySaveMenu(anime: anime, store: library, size: 48)
+        AnimeDetailHero(anime: anime) {
+            HStack(spacing: 12) {
+                if let first = detail?.episodes.last {
+                    Button { selectedEpisode = first } label: { Label("Start watching", systemImage: "play.fill") }
+                        .buttonStyle(PrimaryCapsuleStyle())
                 }
-                NavigationLink {
-                    RelatedAnimeView(
-                        anime: anime,
-                        relatedID: detail?.summary?.relatedID,
-                        library: library
-                    )
-                } label: {
-                    Label("Related series", systemImage: "rectangle.stack.fill")
-                        .font(.subheadline.weight(.bold))
-                        .padding(.horizontal, 17)
-                        .frame(height: 42)
-                        .background(.ultraThinMaterial, in: Capsule())
-                }
-                .disabled(detail == nil)
-            }.padding(.horizontal, 20)
+                LibrarySaveMenu(anime: anime, store: library, size: 48)
+            }
+            NavigationLink {
+                RelatedAnimeView(
+                    anime: anime,
+                    relatedID: detail?.summary?.relatedID,
+                    library: library
+                )
+            } label: {
+                Label("Related series", systemImage: "rectangle.stack.fill")
+                    .font(.subheadline.weight(.bold))
+                    .padding(.horizontal, 17)
+                    .frame(height: 42)
+                    .background(.ultraThinMaterial, in: Capsule())
+            }
+            .disabled(detail == nil)
         }
     }
 
@@ -108,7 +106,16 @@ struct AnimeDetailView: View {
 
     private func episodes(_ items: [Episode]) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            SectionHeading(title: "Episodes", subtitle: "Newest first").padding(.horizontal, 20)
+            HStack {
+                SectionHeading(title: "Episodes", subtitle: "Newest first")
+                Button { showingDownloadSelection = true } label: {
+                    Label("Download", systemImage: "arrow.down.circle")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(minHeight: 44)
+                }
+                .disabled(items.isEmpty)
+            }
+            .padding(.horizontal, 20)
             LazyVStack(spacing: 12) {
                 ForEach(items) { episode in
                     EpisodeRow(
@@ -244,11 +251,33 @@ struct PrimaryCapsuleStyle: ButtonStyle {
     }
 }
 
-private struct EpisodeRow: View {
+struct AnimeDetailHero<Actions: View>: View {
+    let anime: Anime
+    var cachedArtworkURL: URL?
+    @ViewBuilder let actions: Actions
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            RemoteArtwork(url: cachedArtworkURL ?? anime.imageURL).frame(height: 430)
+            LinearGradient(colors: [.clear, CloudTheme.ink.opacity(0.5), CloudTheme.ink], startPoint: .top, endPoint: .bottom)
+            VStack(spacing: 14) {
+                Text(anime.name).font(.system(size: 32, weight: .black, design: .rounded)).multilineTextAlignment(.center)
+                Text(anime.subtitle).font(.subheadline).foregroundStyle(CloudTheme.muted)
+                actions
+            }
+            .padding(.horizontal, 20)
+        }
+    }
+}
+
+struct EpisodeRow: View {
+    @EnvironmentObject private var model: AppModel
     let anime: Anime
     let episode: Episode
     let library: LibraryStore
     @ObservedObject var progressStore: PlaybackProgressStore
+    let download: EpisodeDownload?
+    let onRemove: (() -> Void)?
     let onOpen: () -> Void
     @State private var displayedIsSeen: Bool
     @State private var statusCommitTask: Task<Void, Never>?
@@ -258,12 +287,16 @@ private struct EpisodeRow: View {
         episode: Episode,
         library: LibraryStore,
         progressStore: PlaybackProgressStore,
+        download: EpisodeDownload? = nil,
+        onRemove: (() -> Void)? = nil,
         onOpen: @escaping () -> Void
     ) {
         self.anime = anime
         self.episode = episode
         self.library = library
         self.progressStore = progressStore
+        self.download = download
+        self.onRemove = onRemove
         self.onOpen = onOpen
         _displayedIsSeen = State(initialValue: library.isSeen(episode))
     }
@@ -290,54 +323,35 @@ private struct EpisodeRow: View {
             }
     }
 
+    private var canPlay: Bool {
+        download == nil || model.downloads.localURL(for: episode.id) != nil
+    }
+
+    private var canRetry: Bool {
+        download?.status == .failed || (download?.status == .ready && !canPlay)
+    }
+
     private var rowContent: some View {
         HStack(spacing: 8) {
-            HStack(spacing: 13) {
-                RemoteArtwork(url: episode.imageURL)
-                    .frame(width: 120, height: 72)
-                    .overlay(alignment: .topLeading) {
-                        if episode.isFiller {
-                            EpisodeTypeBadge(episode: episode).padding(6)
-                        }
+            Button {
+                if canPlay { onOpen() }
+                else { model.downloads.retry(episode.id) }
+            } label: {
+                HStack(spacing: 13) {
+                    thumbnail
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text(episode.name).font(.headline).multilineTextAlignment(.leading)
+                        VStack(alignment: .leading, spacing: 7) { episodeStatus }
+                            .font(.caption)
                     }
-                    .overlay(alignment: .bottomLeading) {
-                        if displayedIsSeen {
-                            Label("Watched", systemImage: "checkmark.circle.fill")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(CloudTheme.ink)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 5)
-                                .background(CloudTheme.cyan, in: Capsule())
-                                .padding(6)
-                        }
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: 13))
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 7) {
-                    Text(episode.name).font(.headline).multilineTextAlignment(.leading)
-                    HStack(spacing: 8) {
-                        if let progress = progressStore.progress(for: episode.id) {
-                            Label("Resume \(PlaybackTimeFormatter.string(progress.position))", systemImage: "clock.arrow.circlepath")
-                                .font(.caption).foregroundStyle(CloudTheme.cyan)
-                        } else {
-                            Label(displayedIsSeen ? "Watch again" : "Ready to play", systemImage: displayedIsSeen ? "arrow.counterclockwise" : "play.circle")
-                                .font(.caption).foregroundStyle(CloudTheme.muted)
-                        }
-                    }
-                    if let progress = progressStore.progress(for: episode.id) {
-                        ProgressView(value: progress.fraction)
-                            .tint(CloudTheme.cyan)
-                            .frame(maxWidth: 170)
-                    }
+                    Spacer(minLength: 0)
                 }
-                Spacer()
+                .contentShape(Rectangle())
             }
-            .contentShape(Rectangle())
-            .onTapGesture(perform: onOpen)
+            .buttonStyle(.plain)
+            .disabled(!canPlay && !canRetry)
             .accessibilityElement(children: .combine)
             .accessibilityValue("\(displayedIsSeen ? "Watched" : "Unwatched"), \(episode.episodeTypeLabel) episode")
-            .accessibilityAddTraits(.isButton)
-            .accessibilityAction { onOpen() }
 
             Menu {
                 Button {
@@ -348,6 +362,14 @@ private struct EpisodeRow: View {
                         systemImage: displayedIsSeen ? "eye.slash" : "checkmark.circle"
                     )
                 }
+                if canRetry {
+                    Button("Retry download", systemImage: "arrow.clockwise") { model.downloads.retry(episode.id) }
+                }
+                if let onRemove {
+                    Button(role: .destructive, action: onRemove) {
+                        Label("Remove download", systemImage: "trash")
+                    }
+                }
             } label: {
                 Image(systemName: "ellipsis.circle")
                     .font(.title3.weight(.semibold))
@@ -357,6 +379,56 @@ private struct EpisodeRow: View {
             .accessibilityLabel("Options for \(episode.name)")
         }
         .padding(10)
+    }
+
+    private var thumbnail: some View {
+        RemoteArtwork(url: episode.imageURL, fallbackFileURL: download.flatMap { model.downloads.artworkURL(for: $0.anime.id) })
+            .frame(width: 120, height: 72)
+            .overlay(alignment: .topLeading) {
+                if episode.isFiller {
+                    EpisodeTypeBadge(episode: episode).padding(6)
+                }
+            }
+            .overlay(alignment: .bottomLeading) {
+                if displayedIsSeen {
+                    Label("Watched", systemImage: "checkmark.circle.fill")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(CloudTheme.ink)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(CloudTheme.cyan, in: Capsule())
+                        .padding(6)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 13))
+            .accessibilityHidden(true)
+    }
+
+    @ViewBuilder private var episodeStatus: some View {
+        if canPlay {
+            if let progress = progressStore.progress(for: episode.id) {
+                Label("Resume \(PlaybackTimeFormatter.string(progress.position))", systemImage: "clock.arrow.circlepath")
+                    .foregroundStyle(CloudTheme.cyan)
+                ProgressView(value: progress.fraction)
+                    .tint(CloudTheme.cyan)
+                    .frame(maxWidth: 170)
+            } else {
+                Label(displayedIsSeen ? "Watch again" : (download == nil ? "Ready to play" : "Ready to play offline"),
+                      systemImage: displayedIsSeen ? "arrow.counterclockwise" : "play.circle")
+                    .foregroundStyle(CloudTheme.muted)
+            }
+        } else if canRetry {
+            Label("Retry download", systemImage: "arrow.clockwise")
+                .foregroundStyle(CloudTheme.cyan)
+            Text(download?.failure ?? "Video missing. Download again.")
+                .foregroundStyle(CloudTheme.muted)
+        } else if download?.status == .preparing {
+            Text("Preparing download…").foregroundStyle(CloudTheme.muted)
+        } else if let fraction = model.downloads.progress[episode.id], fraction > 0, fraction <= 1 {
+            ProgressView(value: fraction) { Text("Downloading") }.tint(CloudTheme.cyan)
+        } else {
+            ProgressView("Downloading…").tint(CloudTheme.cyan)
+        }
     }
 
     private func commitSeenStatus(_ newValue: Bool) {
@@ -372,12 +444,13 @@ private struct EpisodeRow: View {
     }
 }
 
-private struct PlayerSheet: View {
+struct PlayerSheet: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
     let anime: Anime
     let episodes: [Episode]
     let library: LibraryStore
+    let downloadedPlayback: Bool
     @ObservedObject var progressStore: PlaybackProgressStore
     @State private var episode: Episode
     @State private var player: AVPlayer?
@@ -397,11 +470,13 @@ private struct PlayerSheet: View {
         initialEpisode: Episode,
         episodes: [Episode],
         library: LibraryStore,
-        progressStore: PlaybackProgressStore
+        progressStore: PlaybackProgressStore,
+        downloadedPlayback: Bool = false
     ) {
         self.anime = anime
         self.episodes = episodes
         self.library = library
+        self.downloadedPlayback = downloadedPlayback
         self.progressStore = progressStore
         _episode = State(initialValue: initialEpisode)
     }
@@ -450,6 +525,15 @@ private struct PlayerSheet: View {
                         Text(progressStore.progress(for: episode.id) == nil ? "Preparing playback…" : "Preparing your resume point…")
                             .font(.subheadline).foregroundStyle(.white.opacity(0.7))
                     }
+                }
+            }
+            .overlay(alignment: .top) {
+                if downloadedPlayback, player != nil {
+                    Label("Playing offline", systemImage: "arrow.down.circle.fill")
+                        .font(.caption.weight(.semibold))
+                        .padding(8)
+                        .background(.regularMaterial, in: Capsule())
+                        .allowsHitTesting(false)
                 }
             }
             .overlay(alignment: .bottom) {
@@ -541,12 +625,19 @@ private struct PlayerSheet: View {
         configureAudioSession()
 
         do {
-            let source = try await model.api.playback(epID: episode.id, quality: "1")
+            let url: URL
+            if let local = model.downloads.localURL(for: episode.id) {
+                url = local
+            } else if downloadedPlayback {
+                throw DownloadError.missing
+            } else {
+                url = try await model.api.playback(epID: episode.id, quality: "1").url
+            }
             guard requestIsCurrent(requestID) else {
                 tearDownPlayer()
                 return
             }
-            let asset = AVURLAsset(url: source.url)
+            let asset = AVURLAsset(url: url)
             guard try await asset.load(.isPlayable) else { throw PlaybackPresentationError.notPlayable }
             guard requestIsCurrent(requestID) else {
                 tearDownPlayer()
@@ -595,8 +686,10 @@ private struct PlayerSheet: View {
                     EpisodeTypeBadge(episode: nextEpisode)
                 }
             } else {
-                Text("You’re all caught up").font(.title2.bold())
-                Text("There isn’t a newer episode available yet.").font(.subheadline).foregroundStyle(CloudTheme.muted)
+                Text(downloadedPlayback ? "No more downloaded episodes" : "You’re all caught up").font(.title2.bold())
+                if !downloadedPlayback {
+                    Text("There isn’t a newer episode available yet.").font(.subheadline).foregroundStyle(CloudTheme.muted)
+                }
             }
             Button("Replay", systemImage: "arrow.counterclockwise") { replayEpisode() }
                 .buttonStyle(.bordered)
@@ -609,6 +702,11 @@ private struct PlayerSheet: View {
     }
 
     private var nextEpisode: Episode? { episodes.nextEpisode(after: episode) }
+
+    private var episodesForWatchStatus: [Episode] {
+        guard downloadedPlayback else { return episodes }
+        return model.downloads.records[episode.id]?.finalCanonEpisode.map { [$0] } ?? []
+    }
 
     private func playNextEpisode() {
         guard let nextEpisode else { return }
@@ -670,7 +768,7 @@ private struct PlayerSheet: View {
             Task { @MainActor in
                 guard isPlayerVisible, episode.id == completedEpisode.id else { return }
                 progressStore.clear(episodeID: completedEpisode.id)
-                library.completePlayback(of: completedEpisode, anime: anime, episodes: episodes)
+                library.completePlayback(of: completedEpisode, anime: anime, episodes: episodesForWatchStatus)
                 withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) { showingUpNext = true }
             }
         }
@@ -687,7 +785,7 @@ private struct PlayerSheet: View {
             Task { @MainActor in
                 guard isPlayerVisible, episode.id == observedEpisode.id else { return }
                 progressStore.save(episodeID: observedEpisode.id, position: position, duration: duration)
-                library.recordPlayback(of: observedEpisode, anime: anime, episodes: episodes, position: position, duration: duration)
+                library.recordPlayback(of: observedEpisode, anime: anime, episodes: episodesForWatchStatus, position: position, duration: duration)
             }
         }
     }

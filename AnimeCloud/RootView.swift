@@ -11,7 +11,8 @@ struct RootView: View {
                 HomeView().tag(0).tabItem { Label("Home", systemImage: "sparkles.tv") }
                 DiscoverView().tag(1).tabItem { Label("Discover", systemImage: "safari") }
                 ScheduleView().tag(2).tabItem { Label("Schedule", systemImage: "calendar") }
-                LibraryView(store: model.library).tag(3).tabItem { Label("Library", systemImage: "rectangle.stack.fill") }
+                LibraryView(store: model.library, isActive: selectedTab == 3)
+                    .tag(3).tabItem { Label("Library", systemImage: "rectangle.stack.fill") }
                 ProfileView().tag(4).tabItem { Label("You", systemImage: "person.crop.circle") }
             }
             .tint(CloudTheme.cyan)
