@@ -75,6 +75,8 @@ struct ProfileView: View {
             Divider().overlay(Color.white.opacity(0.08))
             AniListSettingsRow(sync: model.aniList) { showingAniList = true }
             Divider().overlay(Color.white.opacity(0.08))
+            ClearAllResumePositionsRow(progress: model.playbackProgress)
+            Divider().overlay(Color.white.opacity(0.08))
             setting("Recover password", icon: "key") { showingRecovery = true }
             Divider().overlay(Color.white.opacity(0.08))
             HStack(spacing: 14) {
@@ -94,6 +96,36 @@ struct ProfileView: View {
             HStack(spacing: 14) { Image(systemName: icon).frame(width: 24); Text(title); Spacer(); Image(systemName: "chevron.right").foregroundStyle(CloudTheme.muted) }
                 .padding(16).contentShape(Rectangle())
         }.buttonStyle(.plain)
+    }
+}
+
+private struct ClearAllResumePositionsRow: View {
+    @ObservedObject var progress: PlaybackProgressStore
+    @State private var confirmingClear = false
+
+    var body: some View {
+        Button {
+            confirmingClear = true
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: "clock.arrow.circlepath").frame(width: 24)
+                Text("Clear All Resume Positions")
+                Spacer()
+                Image(systemName: "chevron.right").foregroundStyle(CloudTheme.muted)
+            }
+            .padding(16)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(progress.entries.isEmpty)
+        .opacity(progress.entries.isEmpty ? 0.5 : 1)
+        .confirmationDialog("Clear all resume positions?", isPresented: $confirmingClear, titleVisibility: .visible) {
+            Button("Clear All Resume Positions", role: .destructive) {
+                progress.clearAll()
+            }
+        } message: {
+            Text("Episodes with a saved position will start from the beginning. Watched checkmarks are kept.")
+        }
     }
 }
 

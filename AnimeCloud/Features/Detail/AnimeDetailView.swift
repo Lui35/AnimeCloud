@@ -64,6 +64,12 @@ struct AnimeDetailView: View {
                         .buttonStyle(PrimaryCapsuleStyle())
                 }
                 LibrarySaveMenu(anime: anime, store: library, size: 48)
+                AnimeResumePositionsMenu(
+                    progress: model.playbackProgress,
+                    episodeIDs: Set(detail?.episodes.map(\.id) ?? []).union(
+                        model.downloads.records.values.filter { $0.anime.id == anime.id }.map(\.id)
+                    )
+                )
             }
             NavigationLink {
                 RelatedAnimeView(
@@ -152,6 +158,34 @@ struct AnimeDetailView: View {
             navigationVisibility = next
         } else {
             withAnimation(.snappy(duration: 0.22)) { navigationVisibility = next }
+        }
+    }
+}
+
+struct AnimeResumePositionsMenu: View {
+    @ObservedObject var progress: PlaybackProgressStore
+    let episodeIDs: Set<String>
+    @State private var confirmingClear = false
+
+    var body: some View {
+        Menu {
+            Button("Clear Resume Positions", systemImage: "clock.arrow.circlepath", role: .destructive) {
+                confirmingClear = true
+            }
+            .disabled(episodeIDs.isDisjoint(with: progress.entries.keys))
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.body.weight(.semibold))
+                .frame(width: 48, height: 48)
+                .background(.ultraThinMaterial, in: Circle())
+        }
+        .accessibilityLabel("More anime actions")
+        .confirmationDialog("Clear resume positions for this anime?", isPresented: $confirmingClear, titleVisibility: .visible) {
+            Button("Clear Resume Positions", role: .destructive) {
+                progress.clear(episodeIDs: episodeIDs)
+            }
+        } message: {
+            Text("Episodes with a saved position will start from the beginning. Watched checkmarks are kept.")
         }
     }
 }
@@ -455,6 +489,7 @@ struct PlayerSheet: View {
     @State private var episode: Episode
     @State private var player: AVPlayer?
     @State private var error: String?
+    @State private var assetDuration: Double = 0
     @State private var timeObserver: Any?
     @State private var itemFailureObserver: NSObjectProtocol?
     @State private var endObserver: NSObjectProtocol?
@@ -462,6 +497,7 @@ struct PlayerSheet: View {
     @State private var showingUpNext = false
     @State private var isPlayerVisible = true
     @State private var isAnime4KFullscreen = false
+    @State private var playbackVolume: Float = 1
     @StateObject private var anime4KBenchmark = Anime4KBenchmarkController()
     @AppStorage("playback.anime4k.mode") private var anime4KModeRawValue = Anime4KPlaybackMode.off.rawValue
 
@@ -488,11 +524,11 @@ struct PlayerSheet: View {
                 if let player, !anime4KBenchmark.isRunning {
                     if !isAnime4KFullscreen {
                         if let preset = anime4KMode.preset {
-                            ZStack {
+                            ZStack(alignment: .bottom) {
                                 Anime4KVideoPlayer(player: player, preset: preset)
                                     .id(anime4KMode.rawValue)
-                                    .contentShape(Rectangle())
-                                    .gesture(verticalFullscreenGesture(isFullscreen: false))
+                                    .allowsHitTesting(false)
+                                InlineFullscreenSwipe { isAnime4KFullscreen = true }
                                 EnhancedVideoControls(
                                     player: player,
                                     isFullscreen: false,
@@ -504,6 +540,7 @@ struct PlayerSheet: View {
                                     onInteraction: {}
                                 )
                             }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                             .ignoresSafeArea(edges: .horizontal)
                         } else {
                             NativeVideoPlayer(player: player).ignoresSafeArea(edges: .horizontal)
@@ -550,13 +587,6 @@ struct PlayerSheet: View {
             // Done gives playback one unambiguous cleanup path.
             .interactiveDismissDisabled()
             .onAppear { isPlayerVisible = true }
-            .task(id: retryToken) {
-                // Returning from AVPlayerViewController fullscreen makes SwiftUI
-                // run this task again. Keep the existing player and media item.
-                guard player == nil else { return }
-                let requestID = retryToken
-                await preparePlayback(requestID: requestID)
-            }
         }
         .overlay {
             if !isAnime4KFullscreen {
@@ -566,15 +596,24 @@ struct PlayerSheet: View {
                 )
             }
         }
+        .task(id: retryToken) {
+            guard player == nil else { return }
+            await preparePlayback(requestID: retryToken)
+        }
         .fullScreenCover(isPresented: $isAnime4KFullscreen) {
-            if let player {
-                Anime4KFullscreenPlayer(
-                    player: player,
-                    modeRawValue: $anime4KModeRawValue,
-                    benchmark: anime4KBenchmark,
-                    isPresented: $isAnime4KFullscreen
-                )
-            }
+            Anime4KFullscreenPlayer(
+                player: $player,
+                modeRawValue: $anime4KModeRawValue,
+                benchmark: anime4KBenchmark,
+                isPresented: $isAnime4KFullscreen,
+                episodes: episodes,
+                episode: $episode,
+                assetDuration: $assetDuration,
+                isEpisodeComplete: $showingUpNext,
+                playNext: playNextEpisode,
+                error: $error,
+                retry: { retryToken = UUID() }
+            )
         }
     }
 
@@ -599,16 +638,6 @@ struct PlayerSheet: View {
         anime4KBenchmark.start(player: player)
     }
 
-    private func verticalFullscreenGesture(isFullscreen: Bool) -> some Gesture {
-        DragGesture(minimumDistance: 30).onEnded { value in
-            guard PlayerFullscreenGesture.action(
-                for: value.translation,
-                isFullscreen: isFullscreen
-            ) == .enter else { return }
-            isAnime4KFullscreen = true
-        }
-    }
-
     private func closePlayer() {
         anime4KBenchmark.cancel()
         isAnime4KFullscreen = false
@@ -621,6 +650,7 @@ struct PlayerSheet: View {
         guard requestIsCurrent(requestID) else { return }
         tearDownPlayer(deactivateAudio: false)
         error = nil
+        assetDuration = 0
         showingUpNext = false
         configureAudioSession()
 
@@ -633,20 +663,18 @@ struct PlayerSheet: View {
             } else {
                 url = try await model.api.playback(epID: episode.id, quality: "1").url
             }
-            guard requestIsCurrent(requestID) else {
-                tearDownPlayer()
-                return
-            }
+            guard requestIsCurrent(requestID) else { return }
             let asset = AVURLAsset(url: url)
+            async let loadedDuration = try? asset.load(.duration)
             guard try await asset.load(.isPlayable) else { throw PlaybackPresentationError.notPlayable }
-            guard requestIsCurrent(requestID) else {
-                tearDownPlayer()
-                return
-            }
+            let seconds = await loadedDuration?.seconds ?? 0
+            guard requestIsCurrent(requestID) else { return }
+            assetDuration = seconds.isFinite ? seconds : 0
 
             let item = AVPlayerItem(asset: asset)
             let newPlayer = AVPlayer(playerItem: item)
             newPlayer.automaticallyWaitsToMinimizeStalling = true
+            newPlayer.volume = playbackVolume
             player = newPlayer
             installFailureObserver(for: item)
             installEndObserver(for: item)
@@ -657,12 +685,11 @@ struct PlayerSheet: View {
                 await newPlayer.seek(to: resumeTime, toleranceBefore: .zero, toleranceAfter: .zero)
             }
             guard requestIsCurrent(requestID) else {
-                tearDownPlayer()
+                if player === newPlayer { tearDownPlayer() }
                 return
             }
             newPlayer.play()
         } catch is CancellationError {
-            tearDownPlayer()
             return
         } catch {
             guard requestIsCurrent(requestID) else { return }
@@ -709,8 +736,12 @@ struct PlayerSheet: View {
     }
 
     private func playNextEpisode() {
-        guard let nextEpisode else { return }
+        guard player != nil, let nextEpisode else { return }
         tearDownPlayer(deactivateAudio: false)
+        if !showingUpNext {
+            progressStore.clear(episodeID: episode.id)
+            library.completePlayback(of: episode, anime: anime, episodes: episodesForWatchStatus)
+        }
         episode = nextEpisode
         showingUpNext = false
         retryToken = UUID()
@@ -750,10 +781,9 @@ struct PlayerSheet: View {
         ) { notification in
             let underlying = notification.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error
             Task { @MainActor in
-                guard isPlayerVisible else { return }
+                guard isPlayerVisible, player?.currentItem === item else { return }
                 self.error = playbackMessage(for: underlying ?? item.error ?? PlaybackPresentationError.notPlayable)
-                self.player?.pause()
-                self.player = nil
+                tearDownPlayer(deactivateAudio: false)
             }
         }
     }
@@ -766,7 +796,7 @@ struct PlayerSheet: View {
             queue: .main
         ) { _ in
             Task { @MainActor in
-                guard isPlayerVisible, episode.id == completedEpisode.id else { return }
+                guard isPlayerVisible, player?.currentItem === item else { return }
                 progressStore.clear(episodeID: completedEpisode.id)
                 library.completePlayback(of: completedEpisode, anime: anime, episodes: episodesForWatchStatus)
                 withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) { showingUpNext = true }
@@ -783,7 +813,7 @@ struct PlayerSheet: View {
             let duration = player.currentItem?.duration.seconds ?? 0
             let position = time.seconds
             Task { @MainActor in
-                guard isPlayerVisible, episode.id == observedEpisode.id else { return }
+                guard isPlayerVisible, self.player === player, !showingUpNext else { return }
                 progressStore.save(episodeID: observedEpisode.id, position: position, duration: duration)
                 library.recordPlayback(of: observedEpisode, anime: anime, episodes: episodesForWatchStatus, position: position, duration: duration)
             }
@@ -792,10 +822,13 @@ struct PlayerSheet: View {
 
     private func tearDownPlayer(deactivateAudio: Bool = true) {
         if let player {
+            playbackVolume = player.volume
             let duration = player.currentItem?.duration.seconds ?? 0
             let position = player.currentTime().seconds
-            progressStore.save(episodeID: episode.id, position: position, duration: duration)
-            library.recordPlayback(of: episode, anime: anime, episodes: episodes, position: position, duration: duration)
+            if !showingUpNext {
+                progressStore.save(episodeID: episode.id, position: position, duration: duration)
+                library.recordPlayback(of: episode, anime: anime, episodes: episodesForWatchStatus, position: position, duration: duration)
+            }
             if let timeObserver { player.removeTimeObserver(timeObserver) }
             player.pause()
             player.replaceCurrentItem(with: nil)
@@ -822,17 +855,28 @@ struct PlayerSheet: View {
 
 private struct Anime4KFullscreenPlayer: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    let player: AVPlayer
+    @Binding var player: AVPlayer?
     @Binding var modeRawValue: String
     @ObservedObject var benchmark: Anime4KBenchmarkController
     @Binding var isPresented: Bool
+    let episodes: [Episode]
+    @Binding var episode: Episode
+    @Binding var assetDuration: Double
+    @Binding var isEpisodeComplete: Bool
+    let playNext: () -> Void
+    @Binding var error: String?
+    let retry: () -> Void
     @State private var controlsAreVisible = true
     @State private var controlHideTask: Task<Void, Never>?
+    @State private var startingLevel: Double?
+    @State private var level: Double?
+    @State private var levelControl: PlayerGestureZone = .volume
+    @State private var levelHideTask: Task<Void, Never>?
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .bottom) {
             Color.black.ignoresSafeArea()
-            if !benchmark.isRunning {
+            if let player, !benchmark.isRunning {
                 Group {
                     if let preset = mode.preset {
                         Anime4KVideoPlayer(player: player, preset: preset)
@@ -842,23 +886,62 @@ private struct Anime4KFullscreenPlayer: View {
                     }
                 }
                 .ignoresSafeArea()
-                .contentShape(Rectangle())
-                .onTapGesture { toggleControls() }
-                .gesture(verticalFullscreenGesture)
+                .allowsHitTesting(false)
             }
-            if controlsAreVisible && !benchmark.isRunning && benchmark.report == nil {
-                EnhancedVideoControls(
-                    player: player,
-                    isFullscreen: true,
-                    toggleFullscreen: { isPresented = false },
-                    hideControls: { hideControls() },
-                    anime4KMode: mode,
-                    selectAnime4KMode: selectMode,
-                    runAnime4KBenchmark: runBenchmark,
-                    onInteraction: scheduleControlFade
-                )
-                .ignoresSafeArea(edges: .horizontal)
-                .transition(.opacity)
+            if !benchmark.isRunning && benchmark.report == nil {
+                GeometryReader { geometry in
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture { toggleControls() }
+                        .gesture(playbackGesture(width: geometry.size.width, height: geometry.size.height))
+                }
+                if let player {
+                    VStack(alignment: .trailing, spacing: 0) {
+                        if let nextEpisode = episodes.nextEpisode(after: episode) {
+                            FullscreenNextEpisodeButton(
+                                player: player,
+                                episode: nextEpisode,
+                                assetDuration: assetDuration,
+                                isEpisodeComplete: isEpisodeComplete,
+                                action: playNext
+                            )
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, controlsAreVisible ? 0 : 16)
+                        }
+                        if controlsAreVisible {
+                            EnhancedVideoControls(
+                                player: player,
+                                isFullscreen: true,
+                                toggleFullscreen: { isPresented = false },
+                                hideControls: { hideControls() },
+                                anime4KMode: mode,
+                                selectAnime4KMode: selectMode,
+                                runAnime4KBenchmark: { benchmark.start(player: player) },
+                                onInteraction: scheduleControlFade
+                            )
+                            .transition(.opacity)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .id(ObjectIdentifier(player))
+                    if let level {
+                        levelIndicator(level)
+                    }
+                } else {
+                    VStack(spacing: 16) {
+                        if let error {
+                            Text(error).multilineTextAlignment(.center)
+                            Button("Try Again", action: retry)
+                                .buttonStyle(.borderedProminent)
+                        } else {
+                            ProgressView("Loading episode…")
+                        }
+                        Button("Exit Full Screen") { isPresented = false }
+                            .buttonStyle(.bordered)
+                    }
+                    .padding(24)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
             Anime4KBenchmarkOverlay(
                 controller: benchmark,
@@ -868,12 +951,15 @@ private struct Anime4KFullscreenPlayer: View {
         .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: controlsAreVisible)
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
-        .onAppear {
+        .task {
+            await Task.yield()
+            guard !Task.isCancelled else { return }
             PlaybackOrientation.request(.landscape)
             scheduleControlFade()
         }
         .onDisappear {
             controlHideTask?.cancel()
+            levelHideTask?.cancel()
             PlaybackOrientation.request(.portrait)
         }
     }
@@ -884,10 +970,6 @@ private struct Anime4KFullscreenPlayer: View {
 
     private func selectMode(_ mode: Anime4KPlaybackMode) {
         modeRawValue = mode.rawValue
-    }
-
-    private func runBenchmark() {
-        benchmark.start(player: player)
     }
 
     private func toggleControls() {
@@ -914,14 +996,127 @@ private struct Anime4KFullscreenPlayer: View {
         }
     }
 
-    private var verticalFullscreenGesture: some Gesture {
-        DragGesture(minimumDistance: 30).onEnded { value in
-            guard PlayerFullscreenGesture.action(
-                for: value.translation,
-                isFullscreen: true
-            ) == .exit else { return }
-            isPresented = false
+    private func playbackGesture(width: CGFloat, height: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 16)
+            .onChanged { value in
+                let zone = PlayerGestureZone.at(value.startLocation.x, width: width)
+                guard let player, zone != .center,
+                      startingLevel != nil || PlayerFullscreenGesture.isVertical(value.translation)
+                else { return }
+                let screen = PlaybackOrientation.activeScene?.screen
+                if zone == .brightness && screen == nil { return }
+                let currentLevel = zone == .brightness ? Double(screen?.brightness ?? 0) : Double(player.volume)
+                let initialLevel = startingLevel ?? currentLevel
+                startingLevel = initialLevel
+                let adjusted = min(max(initialLevel - Double(value.translation.height / max(1, height * 0.75)), 0), 1)
+                if zone == .brightness {
+                    screen?.brightness = CGFloat(adjusted)
+                } else {
+                    player.volume = Float(adjusted)
+                }
+                levelHideTask?.cancel()
+                levelControl = zone
+                level = adjusted
+                levelHideTask = Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(1))
+                    guard !Task.isCancelled else { return }
+                    level = nil
+                }
+            }
+            .onEnded { value in
+                startingLevel = nil
+                if PlayerGestureZone.at(value.startLocation.x, width: width) == .center,
+                   PlayerFullscreenGesture.action(for: value.translation, isFullscreen: true) == .exit {
+                    isPresented = false
+                }
+            }
+    }
+
+    private func levelIndicator(_ level: Double) -> some View {
+        let isBrightness = levelControl == .brightness
+        return VStack(spacing: 8) {
+            Image(systemName: isBrightness ? "sun.max.fill" : level == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill")
+            ProgressView(value: level)
+                .tint(.white)
+                .frame(width: 88)
+            Text(level, format: .percent.precision(.fractionLength(0)))
+                .font(.caption.monospacedDigit())
         }
+        .foregroundStyle(.white)
+        .padding(12)
+        .background(.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 16))
+        .padding(.horizontal, 24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: isBrightness ? .trailing : .leading)
+        .allowsHitTesting(false)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(isBrightness ? "Brightness" : "Playback volume")
+        .accessibilityValue(Text(level, format: .percent.precision(.fractionLength(0))))
+    }
+}
+
+private struct FullscreenNextEpisodeButton: View {
+    let player: AVPlayer
+    let episode: Episode
+    let assetDuration: Double
+    let isEpisodeComplete: Bool
+    let action: () -> Void
+    @State private var isNearEnd = false
+    @State private var timeObserver: Any?
+
+    var body: some View {
+        ZStack {
+            Color.clear.frame(width: 0, height: 0).allowsHitTesting(false)
+            if isEpisodeComplete || isNearEnd {
+                Button(action: action) {
+                    Label("Play Next", systemImage: "forward.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 16)
+                        .frame(minHeight: 44)
+                }
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.capsule)
+                .tint(CloudTheme.violet)
+                .accessibilityHint(Text(episode.name))
+            }
+        }
+        .onAppear {
+            guard timeObserver == nil else { return }
+            updateVisibility(at: player.currentTime().seconds)
+            timeObserver = player.addPeriodicTimeObserver(
+                forInterval: CMTime(seconds: 0.5, preferredTimescale: 600),
+                queue: .main
+            ) { time in
+                updateVisibility(at: time.seconds)
+            }
+        }
+        .onDisappear {
+            if let timeObserver { player.removeTimeObserver(timeObserver) }
+            timeObserver = nil
+        }
+    }
+
+    private func updateVisibility(at position: Double) {
+        let itemDuration = player.currentItem?.duration.seconds ?? 0
+        let duration = itemDuration.isFinite && itemDuration > 0 ? itemDuration : assetDuration
+        let shouldShow = NextEpisodeTiming.isNearEnd(position: position, duration: duration)
+        if isNearEnd != shouldShow { isNearEnd = shouldShow }
+    }
+}
+
+enum NextEpisodeTiming {
+    static func isNearEnd(position: Double, duration: Double) -> Bool {
+        guard position.isFinite, duration.isFinite, duration > 0 else { return false }
+        return position >= max(duration - 60, duration * 0.5)
+    }
+}
+
+enum PlayerGestureZone {
+    case volume, center, brightness
+
+    static func at(_ x: CGFloat, width: CGFloat) -> Self {
+        if x < width / 3 { return .volume }
+        if x > width * 2 / 3 { return .brightness }
+        return .center
     }
 }
 
@@ -931,9 +1126,13 @@ enum PlayerFullscreenGestureAction: Equatable {
 }
 
 enum PlayerFullscreenGesture {
+    static func isVertical(_ translation: CGSize) -> Bool {
+        abs(translation.height) > abs(translation.width) * 1.25
+    }
+
     static func action(for translation: CGSize, isFullscreen: Bool) -> PlayerFullscreenGestureAction? {
         guard abs(translation.height) >= 70,
-              abs(translation.height) > abs(translation.width) * 1.25
+              isVertical(translation)
         else { return nil }
         if translation.height < 0, !isFullscreen { return .enter }
         if translation.height > 0, isFullscreen { return .exit }
@@ -941,13 +1140,60 @@ enum PlayerFullscreenGesture {
     }
 }
 
+private struct InlineFullscreenSwipe: UIViewRepresentable {
+    let enterFullscreen: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(enterFullscreen: enterFullscreen) }
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        let swipe = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.swiped))
+        swipe.maximumNumberOfTouches = 1
+        swipe.delegate = context.coordinator
+        view.addGestureRecognizer(swipe)
+        return view
+    }
+
+    func updateUIView(_ view: UIView, context: Context) {
+        context.coordinator.enterFullscreen = enterFullscreen
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var enterFullscreen: () -> Void
+
+        init(enterFullscreen: @escaping () -> Void) {
+            self.enterFullscreen = enterFullscreen
+        }
+
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard let swipe = gestureRecognizer as? UIPanGestureRecognizer else { return false }
+            let velocity = swipe.velocity(in: swipe.view)
+            return velocity.y < 0 && PlayerFullscreenGesture.isVertical(CGSize(width: velocity.x, height: velocity.y))
+        }
+
+        @objc func swiped(_ swipe: UIPanGestureRecognizer) {
+            guard swipe.state == .ended else { return }
+            let distance = swipe.translation(in: swipe.view)
+            if PlayerFullscreenGesture.action(for: CGSize(width: distance.x, height: distance.y), isFullscreen: false) == .enter {
+                enterFullscreen()
+            }
+        }
+    }
+}
+
 private enum PlaybackOrientation {
+    @MainActor
+    static var activeScene: UIWindowScene? {
+        let scenes = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .filter { $0.activationState == .foregroundActive }
+        return scenes.first { $0.windows.contains(where: \.isKeyWindow) } ?? scenes.first
+    }
+
     @MainActor
     static func request(_ orientations: UIInterfaceOrientationMask) {
         guard UIDevice.current.userInterfaceIdiom == .phone,
-              let scene = UIApplication.shared.connectedScenes
-                .compactMap({ $0 as? UIWindowScene })
-                .first(where: { $0.activationState == .foregroundActive })
+              let scene = activeScene
         else { return }
 
         scene.requestGeometryUpdate(.iOS(interfaceOrientations: orientations))

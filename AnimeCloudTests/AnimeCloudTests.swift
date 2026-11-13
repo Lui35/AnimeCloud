@@ -61,6 +61,22 @@ final class AnimeCloudTests: XCTestCase {
         XCTAssertNil(PlayerFullscreenGesture.action(for: CGSize(width: 0, height: 90), isFullscreen: false))
     }
 
+    func testFullscreenPlayerGestureZonesReserveCenterForExit() {
+        XCTAssertEqual(PlayerGestureZone.at(90, width: 900), .volume)
+        XCTAssertEqual(PlayerGestureZone.at(450, width: 900), .center)
+        XCTAssertEqual(PlayerGestureZone.at(810, width: 900), .brightness)
+        XCTAssertFalse(PlayerFullscreenGesture.isVertical(CGSize(width: 80, height: 15)))
+    }
+
+    func testPlayNextWindowStartsAtFinalMinuteForFullEpisodes() {
+        XCTAssertFalse(NextEpisodeTiming.isNearEnd(position: 1_439, duration: 1_500))
+        XCTAssertTrue(NextEpisodeTiming.isNearEnd(position: 1_440, duration: 1_500))
+        XCTAssertFalse(NextEpisodeTiming.isNearEnd(position: 0, duration: 30))
+        XCTAssertTrue(NextEpisodeTiming.isNearEnd(position: 20, duration: 30))
+        XCTAssertFalse(NextEpisodeTiming.isNearEnd(position: 120, duration: .infinity))
+        XCTAssertFalse(NextEpisodeTiming.isNearEnd(position: .nan, duration: 1_500))
+    }
+
     @MainActor
     func testSQLiteBackupRoundTripAndRemovalTombstone() throws {
         let sourceDefaults = UserDefaults(suiteName: "AnimeCloudTests.source.\(UUID())")!
@@ -493,6 +509,28 @@ final class AnimeCloudTests: XCTestCase {
 
         restored.save(episodeID: "episode-1", position: 1_430, duration: 1_500)
         XCTAssertNil(restored.progress(for: "episode-1"))
+    }
+
+    @MainActor
+    func testClearingResumePositionsPreservesWatchedStatus() {
+        let suite = "AnimeCloudTests.clearResume.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let library = LibraryStore(defaults: defaults)
+        let progress = PlaybackProgressStore(defaults: defaults)
+        let watched = Episode(id: "watched", name: "Episode 1")
+        library.markSeen(watched)
+        progress.save(episodeID: watched.id, position: 120, duration: 1_500)
+        progress.save(episodeID: "another-series", position: 60, duration: 1_500)
+
+        progress.clear(episodeIDs: [watched.id, "missing"])
+        let restored = PlaybackProgressStore(defaults: defaults)
+        XCTAssertNil(restored.progress(for: watched.id))
+        XCTAssertEqual(restored.progress(for: "another-series")?.position, 60)
+
+        restored.clearAll()
+        XCTAssertTrue(PlaybackProgressStore(defaults: defaults).entries.isEmpty)
+        XCTAssertTrue(LibraryStore(defaults: defaults).isSeen(watched))
     }
 }
 

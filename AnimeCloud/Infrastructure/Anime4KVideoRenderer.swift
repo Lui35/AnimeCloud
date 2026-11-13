@@ -703,71 +703,68 @@ struct EnhancedVideoControls: View {
     @State private var timeObserver: Any?
 
     var body: some View {
-        VStack {
-            Spacer()
-            VStack(spacing: 12) {
-                ZStack {
-                    HStack(spacing: 34) {
-                        Button { skip(by: -10) } label: {
-                            Image(systemName: "gobackward.10")
-                        }
-                        Button { togglePlayback() } label: {
-                            Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                                .font(.title2)
-                                .frame(width: 36, height: 36)
-                        }
-                        Button { skip(by: 10) } label: {
-                            Image(systemName: "goforward.10")
-                        }
+        VStack(spacing: 12) {
+            ZStack {
+                HStack(spacing: 34) {
+                    Button { skip(by: -10) } label: {
+                        Image(systemName: "gobackward.10")
                     }
-
-                    HStack {
-                        if let hideControls {
-                            Button(action: hideControls) {
-                                Image(systemName: "chevron.down")
-                                    .frame(width: 36, height: 36)
-                            }
-                            .accessibilityLabel("Hide playback controls")
-                        }
-                        if let anime4KMode,
-                           let selectAnime4KMode,
-                           let runAnime4KBenchmark {
-                            Anime4KModeMenu(
-                                mode: anime4KMode,
-                                selectMode: selectAnime4KMode,
-                                runBenchmark: runAnime4KBenchmark,
-                                iconOnly: true
-                            )
-                        }
-                        Spacer()
-                        Button(action: toggleFullscreen) {
-                            Image(systemName: isFullscreen
-                                ? "arrow.down.right.and.arrow.up.left"
-                                : "arrow.up.left.and.arrow.down.right")
-                                .frame(width: 36, height: 36)
-                        }
-                        .accessibilityLabel(isFullscreen ? "Exit full screen" : "Enter full screen")
+                    Button { togglePlayback() } label: {
+                        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                            .font(.title2)
+                            .frame(width: 36, height: 36)
+                    }
+                    Button { skip(by: 10) } label: {
+                        Image(systemName: "goforward.10")
                     }
                 }
-                .font(.title3.weight(.semibold))
 
-                HStack(spacing: 10) {
-                    Text(PlaybackTimeFormatter.string(currentTime))
-                    Slider(
-                        value: $currentTime,
-                        in: 0...max(duration, 1),
-                        onEditingChanged: scrubStateChanged
-                    )
-                    Text("−\(PlaybackTimeFormatter.string(max(0, duration - currentTime)))")
+                HStack {
+                    if let hideControls {
+                        Button(action: hideControls) {
+                            Image(systemName: "chevron.down")
+                                .frame(width: 36, height: 36)
+                        }
+                        .accessibilityLabel("Hide playback controls")
+                    }
+                    if let anime4KMode,
+                       let selectAnime4KMode,
+                       let runAnime4KBenchmark {
+                        Anime4KModeMenu(
+                            mode: anime4KMode,
+                            selectMode: selectAnime4KMode,
+                            runBenchmark: runAnime4KBenchmark,
+                            iconOnly: true
+                        )
+                    }
+                    Spacer()
+                    Button(action: toggleFullscreen) {
+                        Image(systemName: isFullscreen
+                            ? "arrow.down.right.and.arrow.up.left"
+                            : "arrow.up.left.and.arrow.down.right")
+                            .frame(width: 36, height: 36)
+                    }
+                    .accessibilityLabel(isFullscreen ? "Exit full screen" : "Enter full screen")
                 }
-                .font(.caption.monospacedDigit())
             }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 14)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .padding(16)
+            .font(.title3.weight(.semibold))
+
+            HStack(spacing: 10) {
+                Text(PlaybackTimeFormatter.string(currentTime))
+                Slider(
+                    value: $currentTime,
+                    in: 0...max(duration, 1),
+                    onEditingChanged: scrubStateChanged
+                )
+                Text("−\(PlaybackTimeFormatter.string(max(0, duration - currentTime)))")
+            }
+            .font(.caption.monospacedDigit())
         }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .padding(16)
         .onAppear(perform: installTimeObserver)
         .onDisappear(perform: removeTimeObserver)
         .simultaneousGesture(TapGesture().onEnded(onInteraction))
