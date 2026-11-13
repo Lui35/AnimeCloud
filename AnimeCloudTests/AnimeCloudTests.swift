@@ -442,6 +442,41 @@ final class AnimeCloudTests: XCTestCase {
     }
 
     @MainActor
+    func testRemovingAnimeDownloadsOnlyRemovesItsEpisodes() throws {
+        let suite = "AnimeCloudTests.animeDownloads.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        let directory = FileManager.default.temporaryDirectory.appending(path: suite)
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let anime = Anime(id: "anime", name: "Series")
+        let otherAnime = Anime(id: "other", name: "Other Series")
+        var saved: [String: EpisodeDownload] = [:]
+        for (id, series) in [("one", anime), ("two", anime), ("other", otherAnime)] {
+            let episode = Episode(id: id, name: id)
+            let path = "\(id).mp4"
+            saved[id] = EpisodeDownload(anime: series, episode: episode, catalogPosition: 0,
+                                        finalCanonEpisode: nil, status: .ready, relativePath: path)
+            try Data([0]).write(to: directory.appending(path: path))
+        }
+        let failed = Episode(id: "failed", name: "Failed episode")
+        saved[failed.id] = EpisodeDownload(anime: anime, episode: failed, catalogPosition: 0,
+                                          finalCanonEpisode: nil, status: .failed)
+        defaults.set(try JSONEncoder().encode(saved), forKey: "downloads.episodes")
+
+        let downloads = EpisodeDownloads(api: .live, defaults: defaults, directory: directory)
+        try downloads.removeAll(forAnimeID: anime.id)
+
+        let restored = EpisodeDownloads(api: .live, defaults: defaults, directory: directory)
+        XCTAssertEqual(Set(restored.records.keys), ["other"])
+        XCTAssertNotNil(restored.localURL(for: "other"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appending(path: "one.mp4").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appending(path: "two.mp4").path))
+    }
+
+    @MainActor
     func testCloudUploadKeepsNewerWatchChangesPending() async throws {
         let suite = "AnimeCloudTests.uploadRevision.\(UUID())"
         let defaults = UserDefaults(suiteName: suite)!
