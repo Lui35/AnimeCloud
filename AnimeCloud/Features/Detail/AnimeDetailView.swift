@@ -64,7 +64,8 @@ struct AnimeDetailView: View {
                         .buttonStyle(PrimaryCapsuleStyle())
                 }
                 LibrarySaveMenu(anime: anime, store: library, size: 48)
-                AnimeResumePositionsMenu(
+                AnimePlaybackMenu(
+                    animeID: anime.id,
                     progress: model.playbackProgress,
                     episodeIDs: Set(detail?.episodes.map(\.id) ?? []).union(
                         model.downloads.records.values.filter { $0.anime.id == anime.id }.map(\.id)
@@ -162,13 +163,24 @@ struct AnimeDetailView: View {
     }
 }
 
-struct AnimeResumePositionsMenu: View {
+struct AnimePlaybackMenu: View {
     @ObservedObject var progress: PlaybackProgressStore
     let episodeIDs: Set<String>
+    @AppStorage private var nextEpisodeLeadTime: Int
     @State private var confirmingClear = false
+    @State private var editingTiming = false
+
+    init(animeID: String, progress: PlaybackProgressStore, episodeIDs: Set<String>) {
+        self.progress = progress
+        self.episodeIDs = episodeIDs
+        _nextEpisodeLeadTime = AppStorage(wrappedValue: NextEpisodeTiming.defaultLeadTime, NextEpisodeTiming.storageKey(for: animeID))
+    }
 
     var body: some View {
         Menu {
+            Button("Play Next Timing", systemImage: "timer") {
+                editingTiming = true
+            }
             Button("Clear Resume Positions", systemImage: "clock.arrow.circlepath", role: .destructive) {
                 confirmingClear = true
             }
@@ -180,6 +192,31 @@ struct AnimeResumePositionsMenu: View {
                 .background(.ultraThinMaterial, in: Circle())
         }
         .accessibilityLabel("More anime actions")
+        .sheet(isPresented: $editingTiming) {
+            NavigationStack {
+                Form {
+                    Section {
+                        Stepper(value: $nextEpisodeLeadTime, in: 15...300, step: 15) {
+                            LabeledContent("Time remaining", value: PlaybackTimeFormatter.string(Double(nextEpisodeLeadTime)))
+                        }
+                        Button("Reset to 2 Minutes") {
+                            nextEpisodeLeadTime = NextEpisodeTiming.defaultLeadTime
+                        }
+                        .disabled(nextEpisodeLeadTime == NextEpisodeTiming.defaultLeadTime)
+                    } footer: {
+                        Text("Play Next appears this long before the end in Anime4K fullscreen. This setting applies to this anime.")
+                    }
+                }
+                .navigationTitle("Play Next Timing")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { editingTiming = false }
+                    }
+                }
+            }
+            .presentationDetents([.medium, .large])
+        }
         .confirmationDialog("Clear resume positions for this anime?", isPresented: $confirmingClear, titleVisibility: .visible) {
             Button("Clear Resume Positions", role: .destructive) {
                 progress.clear(episodeIDs: episodeIDs)
@@ -500,6 +537,7 @@ struct PlayerSheet: View {
     @State private var playbackVolume: Float = 1
     @StateObject private var anime4KBenchmark = Anime4KBenchmarkController()
     @AppStorage("playback.anime4k.mode") private var anime4KModeRawValue = Anime4KPlaybackMode.off.rawValue
+    @AppStorage private var nextEpisodeLeadTime: Int
 
     init(
         anime: Anime,
@@ -515,6 +553,7 @@ struct PlayerSheet: View {
         self.downloadedPlayback = downloadedPlayback
         self.progressStore = progressStore
         _episode = State(initialValue: initialEpisode)
+        _nextEpisodeLeadTime = AppStorage(wrappedValue: NextEpisodeTiming.defaultLeadTime, NextEpisodeTiming.storageKey(for: anime.id))
     }
 
     var body: some View {
@@ -609,6 +648,7 @@ struct PlayerSheet: View {
                 episodes: episodes,
                 episode: $episode,
                 assetDuration: $assetDuration,
+                nextEpisodeLeadTime: $nextEpisodeLeadTime,
                 isEpisodeComplete: $showingUpNext,
                 playNext: playNextEpisode,
                 error: $error,
@@ -862,6 +902,7 @@ private struct Anime4KFullscreenPlayer: View {
     let episodes: [Episode]
     @Binding var episode: Episode
     @Binding var assetDuration: Double
+    @Binding var nextEpisodeLeadTime: Int
     @Binding var isEpisodeComplete: Bool
     let playNext: () -> Void
     @Binding var error: String?
@@ -902,6 +943,7 @@ private struct Anime4KFullscreenPlayer: View {
                                 player: player,
                                 episode: nextEpisode,
                                 assetDuration: assetDuration,
+                                leadTime: nextEpisodeLeadTime,
                                 isEpisodeComplete: isEpisodeComplete,
                                 action: playNext
                             )
@@ -1058,6 +1100,7 @@ private struct FullscreenNextEpisodeButton: View {
     let player: AVPlayer
     let episode: Episode
     let assetDuration: Double
+    let leadTime: Int
     let isEpisodeComplete: Bool
     let action: () -> Void
     @State private var isNearEnd = false
@@ -1093,20 +1136,30 @@ private struct FullscreenNextEpisodeButton: View {
             if let timeObserver { player.removeTimeObserver(timeObserver) }
             timeObserver = nil
         }
+        .onChange(of: leadTime) { _, _ in
+            updateVisibility(at: player.currentTime().seconds)
+        }
     }
 
     private func updateVisibility(at position: Double) {
         let itemDuration = player.currentItem?.duration.seconds ?? 0
         let duration = itemDuration.isFinite && itemDuration > 0 ? itemDuration : assetDuration
-        let shouldShow = NextEpisodeTiming.isNearEnd(position: position, duration: duration)
+        let shouldShow = NextEpisodeTiming.isNearEnd(position: position, duration: duration, leadTime: leadTime)
         if isNearEnd != shouldShow { isNearEnd = shouldShow }
     }
 }
 
 enum NextEpisodeTiming {
-    static func isNearEnd(position: Double, duration: Double) -> Bool {
+    static let defaultLeadTime = 120
+
+    static func storageKey(for animeID: String) -> String {
+        "playback.nextEpisodeLeadTime.\(animeID)"
+    }
+
+    static func isNearEnd(position: Double, duration: Double, leadTime: Int = defaultLeadTime) -> Bool {
         guard position.isFinite, duration.isFinite, duration > 0 else { return false }
-        return position >= max(duration - 60, duration * 0.5)
+        let start = Double(leadTime) < duration ? duration - Double(leadTime) : duration * 0.5
+        return position >= start
     }
 }
 

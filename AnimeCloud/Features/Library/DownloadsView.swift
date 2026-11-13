@@ -270,7 +270,7 @@ private struct DownloadedAnimeView: View {
                                 .buttonStyle(PrimaryCapsuleStyle())
                             }
                             LibrarySaveMenu(anime: anime, store: library, size: 48)
-                            AnimeResumePositionsMenu(progress: progress, episodeIDs: Set(records.map(\.id)))
+                            AnimePlaybackMenu(animeID: anime.id, progress: progress, episodeIDs: Set(records.map(\.id)))
                         }
                     }
                     VStack(alignment: .leading, spacing: 14) {

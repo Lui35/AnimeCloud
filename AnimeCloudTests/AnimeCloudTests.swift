@@ -68,9 +68,12 @@ final class AnimeCloudTests: XCTestCase {
         XCTAssertFalse(PlayerFullscreenGesture.isVertical(CGSize(width: 80, height: 15)))
     }
 
-    func testPlayNextWindowStartsAtFinalMinuteForFullEpisodes() {
-        XCTAssertFalse(NextEpisodeTiming.isNearEnd(position: 1_439, duration: 1_500))
-        XCTAssertTrue(NextEpisodeTiming.isNearEnd(position: 1_440, duration: 1_500))
+    func testPlayNextWindowUsesTwoMinutesByDefaultAndAllowsAnOverride() {
+        XCTAssertFalse(NextEpisodeTiming.isNearEnd(position: 1_379, duration: 1_500))
+        XCTAssertTrue(NextEpisodeTiming.isNearEnd(position: 1_380, duration: 1_500))
+        XCTAssertFalse(NextEpisodeTiming.isNearEnd(position: 1_409, duration: 1_500, leadTime: 90))
+        XCTAssertTrue(NextEpisodeTiming.isNearEnd(position: 1_410, duration: 1_500, leadTime: 90))
+        XCTAssertTrue(NextEpisodeTiming.isNearEnd(position: 180, duration: 480, leadTime: 300))
         XCTAssertFalse(NextEpisodeTiming.isNearEnd(position: 0, duration: 30))
         XCTAssertTrue(NextEpisodeTiming.isNearEnd(position: 20, duration: 30))
         XCTAssertFalse(NextEpisodeTiming.isNearEnd(position: 120, duration: .infinity))
