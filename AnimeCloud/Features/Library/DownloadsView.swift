@@ -172,6 +172,7 @@ struct DownloadSelectionView: View {
 struct DownloadsView: View {
     @EnvironmentObject private var model: AppModel
     @ObservedObject var downloads: EpisodeDownloads
+    @State private var removingAnime: Anime?
 
     private var groups: [(anime: Anime, records: [EpisodeDownload])] {
         Dictionary(grouping: downloads.records.values, by: { $0.anime.id })
@@ -209,6 +210,22 @@ struct DownloadsView: View {
                                     .accessibilityElement(children: .combine)
                                 }
                                 .buttonStyle(.plain)
+                                .overlay(alignment: .topLeading) {
+                                    Menu {
+                                        Button(role: .destructive) {
+                                            removingAnime = anime
+                                        } label: {
+                                            Label("Remove all downloads", systemImage: "trash")
+                                        }
+                                    } label: {
+                                        Image(systemName: "ellipsis")
+                                            .font(.subheadline.weight(.semibold))
+                                            .frame(width: 44, height: 44)
+                                            .background(.ultraThinMaterial, in: Circle())
+                                    }
+                                    .accessibilityLabel("Download options for \(anime.name)")
+                                    .padding(8)
+                                }
                             }
                         }
                     }
@@ -220,6 +237,20 @@ struct DownloadsView: View {
         .navigationTitle("Downloads")
         .task { await model.retryPendingWatchSync() }
         .refreshable { await model.retryPendingWatchSync() }
+        .confirmationDialog("Remove all downloads?", isPresented: Binding(
+            get: { removingAnime != nil },
+            set: { if !$0 { removingAnime = nil } }
+        ), titleVisibility: .visible, presenting: removingAnime) { anime in
+            Button("Remove all downloads", role: .destructive) {
+                do {
+                    try downloads.removeAll(forAnimeID: anime.id)
+                } catch {
+                    model.message = AppMessage(title: "Some downloads couldn’t be removed", detail: error.localizedDescription)
+                }
+            }
+        } message: { anime in
+            Text("Remove every downloaded episode of \(anime.name) from this device? Your watched status and resume positions will stay saved.")
+        }
     }
 }
 
