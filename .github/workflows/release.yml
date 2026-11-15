@@ -23,6 +23,8 @@ jobs:
     name: Build and publish unsigned IPA
     runs-on: macos-15
     timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
 
     steps:
       - name: Resolve release tag
@@ -62,6 +64,11 @@ jobs:
             git tag "${TAG}" "${GITHUB_SHA}"
             git push origin "${TAG}"
           fi
+
+      - name: Prepare Xcode and Metal
+        run: |
+          xcodebuild -version
+          xcrun metal --version || xcodebuild -downloadComponent MetalToolchain
 
       - name: Build unsigned IPA
         env:

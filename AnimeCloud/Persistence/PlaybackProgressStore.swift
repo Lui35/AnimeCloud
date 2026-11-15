@@ -43,7 +43,19 @@ final class PlaybackProgressStore: ObservableObject {
     }
 
     func clear(episodeID: String) {
-        entries.removeValue(forKey: episodeID)
+        clear(episodeIDs: [episodeID])
+    }
+
+    func clear(episodeIDs: Set<String>) {
+        let retained = entries.filter { !episodeIDs.contains($0.key) }
+        guard retained.count != entries.count else { return }
+        entries = retained
+        persist()
+    }
+
+    func clearAll() {
+        guard !entries.isEmpty else { return }
+        entries = [:]
         persist()
     }
 
