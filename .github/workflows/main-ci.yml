@@ -21,19 +21,23 @@ jobs:
     name: Build and test
     runs-on: macos-15
     timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - name: Show build environment
-        run: xcodebuild -version
+      - name: Prepare Xcode and Metal
+        run: |
+          xcodebuild -version
+          xcrun metal --version || xcodebuild -downloadComponent MetalToolchain
 
       - name: Build and run unit tests
         run: |
-          simulator_id="$(xcrun simctl list devices available -j | jq -r '[.devices[] | .[] | select(.name | startswith("iPhone"))][0].udid // empty')"
+          simulator_id="$(xcrun simctl list devices available -j | jq -r '[.devices | to_entries[] | select(.key | contains("iOS-26-")) | .value[] | select(.name | startswith("iPhone"))][0].udid // empty')"
           if [[ -z "${simulator_id}" ]]; then
-            echo "No available iPhone simulator was found on the runner" >&2
+            echo "No available iOS 26 iPhone simulator was found on the runner" >&2
             exit 1
           fi
 
