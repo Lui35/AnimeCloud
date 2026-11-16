@@ -4,6 +4,7 @@ import SwiftUI
 
 struct AnimeDetailView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @EnvironmentObject private var model: AppModel
     let anime: Anime
     let library: LibraryStore
@@ -14,36 +15,52 @@ struct AnimeDetailView: View {
     @State private var navigationVisibility = ScrollAwareNavigationVisibility()
 
     var body: some View {
-        ZStack {
-            CloudBackground()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    hero.background {
-                        GeometryReader { proxy in
-                            Color.clear.preference(
-                                key: AnimeDetailScrollOffsetKey.self,
-                                value: proxy.frame(in: .named("animeDetailScroll")).minY
-                            )
+        GeometryReader { geometry in
+            ZStack {
+                CloudBackground()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
+                        hero(topInset: geometry.safeAreaInsets.top)
+                            .background {
+                                GeometryReader { proxy in
+                                    Color.clear.preference(
+                                        key: AnimeDetailScrollOffsetKey.self,
+                                        value: proxy.frame(in: .named("animeDetailScroll")).minY
+                                    )
+                                }
+                            }
+                        if isLoading { ProgressView("Loading episodes…").frame(maxWidth: .infinity).padding(50) }
+                        if let detail {
+                            metadata(detail)
+                            story(detail)
+                            episodes(detail.episodes)
                         }
                     }
-                    if isLoading { ProgressView("Loading episodes…").frame(maxWidth: .infinity).padding(50) }
-                    if let detail {
-                        metadata(detail)
-                        story(detail)
-                        episodes(detail.episodes)
-                    }
+                    .padding(.bottom, 80)
                 }
-                .padding(.bottom, 80)
+                .ignoresSafeArea(.container, edges: .top)
+                .coordinateSpace(name: "animeDetailScroll")
+                .onPreferenceChange(AnimeDetailScrollOffsetKey.self, perform: updateNavigationVisibility)
             }
-            .coordinateSpace(name: "animeDetailScroll")
-            .onPreferenceChange(AnimeDetailScrollOffsetKey.self, perform: updateNavigationVisibility)
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(navigationVisibility.isVisible ? .visible : .hidden, for: .navigationBar)
         .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                AnimePlaybackMenu(
+                    animeID: anime.id,
+                    progress: model.playbackProgress,
+                    episodeIDs: Set(detail?.episodes.map(\.id) ?? []).union(
+                        model.downloads.records.values.filter { $0.anime.id == anime.id }.map(\.id)
+                    ),
+                    isToolbarItem: true
+                )
+            }
+        }
         .task { await load() }
         .sheet(isPresented: $showingDownloadSelection) {
-            DownloadSelectionView(downloads: model.downloads, anime: anime, catalog: detail?.episodes ?? [])
+            DownloadSelectionView(downloads: model.downloads, library: library, anime: anime, catalog: detail?.episodes ?? [])
         }
         .sheet(item: $selectedEpisode) { episode in
             PlayerSheet(
@@ -56,21 +73,18 @@ struct AnimeDetailView: View {
         }
     }
 
-    private var hero: some View {
-        AnimeDetailHero(anime: anime) {
+    private func hero(topInset: CGFloat) -> some View {
+        AnimeDetailHero(
+            anime: anime,
+            artworkHeight: verticalSizeClass == .compact ? 430 : 520,
+            topInset: topInset
+        ) {
             HStack(spacing: 12) {
                 if let first = detail?.episodes.last {
                     Button { selectedEpisode = first } label: { Label("Start watching", systemImage: "play.fill") }
                         .buttonStyle(PrimaryCapsuleStyle())
                 }
                 LibrarySaveMenu(anime: anime, store: library, size: 48)
-                AnimePlaybackMenu(
-                    animeID: anime.id,
-                    progress: model.playbackProgress,
-                    episodeIDs: Set(detail?.episodes.map(\.id) ?? []).union(
-                        model.downloads.records.values.filter { $0.anime.id == anime.id }.map(\.id)
-                    )
-                )
             }
             NavigationLink {
                 RelatedAnimeView(
@@ -166,13 +180,15 @@ struct AnimeDetailView: View {
 struct AnimePlaybackMenu: View {
     @ObservedObject var progress: PlaybackProgressStore
     let episodeIDs: Set<String>
+    let isToolbarItem: Bool
     @AppStorage private var nextEpisodeLeadTime: Int
     @State private var confirmingClear = false
     @State private var editingTiming = false
 
-    init(animeID: String, progress: PlaybackProgressStore, episodeIDs: Set<String>) {
+    init(animeID: String, progress: PlaybackProgressStore, episodeIDs: Set<String>, isToolbarItem: Bool = false) {
         self.progress = progress
         self.episodeIDs = episodeIDs
+        self.isToolbarItem = isToolbarItem
         _nextEpisodeLeadTime = AppStorage(wrappedValue: NextEpisodeTiming.defaultLeadTime, NextEpisodeTiming.storageKey(for: animeID))
     }
 
@@ -188,8 +204,11 @@ struct AnimePlaybackMenu: View {
         } label: {
             Image(systemName: "ellipsis")
                 .font(.body.weight(.semibold))
-                .frame(width: 48, height: 48)
-                .background(.ultraThinMaterial, in: Circle())
+                .foregroundStyle(.white)
+                .frame(width: isToolbarItem ? nil : 48, height: isToolbarItem ? nil : 48)
+                .background {
+                    if !isToolbarItem { Circle().fill(.regularMaterial) }
+                }
         }
         .accessibilityLabel("More anime actions")
         .sheet(isPresented: $editingTiming) {
@@ -204,7 +223,7 @@ struct AnimePlaybackMenu: View {
                         }
                         .disabled(nextEpisodeLeadTime == NextEpisodeTiming.defaultLeadTime)
                     } footer: {
-                        Text("Play Next appears this long before the end in Anime4K fullscreen. This setting applies to this anime.")
+                        Text("Play Next appears this long before the end of an episode. This setting applies to this anime.")
                     }
                 }
                 .navigationTitle("Play Next Timing")
@@ -258,7 +277,7 @@ private struct RelatedAnimeView: View {
     @EnvironmentObject private var model: AppModel
     let anime: Anime
     let relatedID: String?
-    let library: LibraryStore
+    @ObservedObject var library: LibraryStore
     @State private var items: [Anime] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
@@ -287,11 +306,15 @@ private struct RelatedAnimeView: View {
                 ScrollView {
                     LazyVGrid(columns: columns, alignment: .leading, spacing: 22) {
                         ForEach(items) { related in
-                            NavigationLink {
-                                AnimeDetailView(anime: related, library: library)
-                            } label: {
-                                PosterView(anime: related, width: 142, height: 204)
-                            }.buttonStyle(.plain)
+                            VStack(alignment: .leading, spacing: 6) {
+                                NavigationLink {
+                                    AnimeDetailView(anime: related, library: library)
+                                } label: {
+                                    PosterView(anime: related, width: 142, height: 204)
+                                }
+                                .buttonStyle(.plain)
+                                watchLaterAction(for: related)
+                            }
                         }
                     }
                     .padding(20)
@@ -301,6 +324,30 @@ private struct RelatedAnimeView: View {
         .navigationTitle("Related to \(anime.name)")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: reloadToken) { await load() }
+    }
+
+    @ViewBuilder
+    private func watchLaterAction(for related: Anime) -> some View {
+        let category = library.category(for: related)
+        if let category, category != .favorites {
+            Label(category.title, systemImage: category == .watchLater ? "checkmark" : category.icon)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(CloudTheme.muted)
+                .frame(minHeight: 44)
+        } else {
+            Button {
+                library.setCategory(.watchLater, for: related)
+            } label: {
+                Label(LibraryCategory.watchLater.title, systemImage: LibraryCategory.watchLater.icon)
+                    .font(.footnote.weight(.semibold))
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: 44)
+                    .background(.ultraThinMaterial, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(CloudTheme.cyan)
+            .accessibilityLabel("Add \(related.name) to Watch Later")
+        }
     }
 
     private func load() async {
@@ -325,11 +372,22 @@ struct PrimaryCapsuleStyle: ButtonStyle {
 struct AnimeDetailHero<Actions: View>: View {
     let anime: Anime
     var cachedArtworkURL: URL?
+    var artworkHeight: CGFloat = 430
+    var topInset: CGFloat = 0
+    var playbackMenu: AnimePlaybackMenu?
     @ViewBuilder let actions: Actions
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            RemoteArtwork(url: cachedArtworkURL ?? anime.imageURL).frame(height: 430)
+            RemoteArtwork(url: cachedArtworkURL ?? anime.imageURL)
+                .frame(height: artworkHeight)
+                .overlay(alignment: .top) {
+                    if topInset > 0 {
+                        LinearGradient(colors: [.black.opacity(0.72), .clear], startPoint: .top, endPoint: .bottom)
+                            .frame(height: topInset + 24)
+                            .allowsHitTesting(false)
+                    }
+                }
             LinearGradient(colors: [.clear, CloudTheme.ink.opacity(0.5), CloudTheme.ink], startPoint: .top, endPoint: .bottom)
             VStack(spacing: 14) {
                 Text(anime.name).font(.system(size: 32, weight: .black, design: .rounded)).multilineTextAlignment(.center)
@@ -337,6 +395,9 @@ struct AnimeDetailHero<Actions: View>: View {
                 actions
             }
             .padding(.horizontal, 20)
+        }
+        .overlay(alignment: .topTrailing) {
+            if let playbackMenu { playbackMenu.padding(16) }
         }
     }
 }
@@ -533,9 +594,10 @@ struct PlayerSheet: View {
     @State private var retryToken = UUID()
     @State private var showingUpNext = false
     @State private var isPlayerVisible = true
-    @State private var isAnime4KFullscreen = false
+    @State private var isFullscreen = false
     @State private var playbackVolume: Float = 1
     @StateObject private var anime4KBenchmark = Anime4KBenchmarkController()
+    @StateObject private var pictureInPicture = PlaybackPictureInPicture()
     @AppStorage("playback.anime4k.mode") private var anime4KModeRawValue = Anime4KPlaybackMode.off.rawValue
     @AppStorage private var nextEpisodeLeadTime: Int
 
@@ -561,29 +623,33 @@ struct PlayerSheet: View {
             ZStack {
                 Color.black.ignoresSafeArea()
                 if let player, !anime4KBenchmark.isRunning {
-                    if !isAnime4KFullscreen {
-                        if let preset = anime4KMode.preset {
-                            ZStack(alignment: .bottom) {
-                                Anime4KVideoPlayer(player: player, preset: preset)
-                                    .id(anime4KMode.rawValue)
-                                    .allowsHitTesting(false)
-                                InlineFullscreenSwipe { isAnime4KFullscreen = true }
-                                EnhancedVideoControls(
-                                    player: player,
-                                    isFullscreen: false,
-                                    toggleFullscreen: { isAnime4KFullscreen = true },
-                                    hideControls: nil,
-                                    anime4KMode: nil,
-                                    selectAnime4KMode: nil,
-                                    runAnime4KBenchmark: nil,
-                                    onInteraction: {}
-                                )
+                    if !isFullscreen {
+                        ZStack(alignment: .bottom) {
+                            PlaybackSurface(player: player, mode: anime4KMode, pictureInPicture: pictureInPicture)
+                                .allowsHitTesting(false)
+                            PlaybackFullscreenSwipe { isFullscreen = true }
+                            PlaybackControls(
+                                player: player,
+                                assetDuration: assetDuration,
+                                areVisible: true,
+                                onInteraction: { _ in },
+                                isFullscreen: false,
+                                toggleFullscreen: { isFullscreen = true }
+                            ) {
+                                if !showingUpNext, let nextEpisode {
+                                    NextEpisodeButton(
+                                        player: player,
+                                        episode: nextEpisode,
+                                        assetDuration: assetDuration,
+                                        leadTime: nextEpisodeLeadTime,
+                                        isEpisodeComplete: false,
+                                        action: playNextEpisode
+                                    )
+                                }
                             }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                            .ignoresSafeArea(edges: .horizontal)
-                        } else {
-                            NativeVideoPlayer(player: player).ignoresSafeArea(edges: .horizontal)
+                            .id(ObjectIdentifier(player))
                         }
+                        .ignoresSafeArea(edges: .horizontal)
                     }
                 }
                 else if let error {
@@ -618,17 +684,28 @@ struct PlayerSheet: View {
             .navigationTitle(episode.name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { anime4KMenu }
-                ToolbarItem(placement: .topBarTrailing) { Button("Done") { closePlayer() } }
+                ToolbarItem(placement: .topBarLeading) {
+                    if !isFullscreen {
+                        Button("Run Device Benchmark", systemImage: "gauge.with.dots.needle.67percent", action: runAnime4KBenchmark)
+                            .labelStyle(.iconOnly)
+                            .disabled(player == nil)
+                    }
+                }
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    if player != nil, !isFullscreen {
+                        Anime4KModeMenu(mode: anime4KMode, selectMode: selectAnime4KMode)
+                        PlaybackOutputControls(pictureInPicture: pictureInPicture, isEnhanced: anime4KMode.preset != nil)
+                        Button("Enter full screen", systemImage: "arrow.up.left.and.arrow.down.right") { isFullscreen = true }
+                            .labelStyle(.iconOnly)
+                    }
+                    Button("Done") { closePlayer() }
+                }
             }
-            // SwiftUI emits onDisappear while AVPlayerViewController enters and exits
-            // native fullscreen, so it cannot be used as a dismissal signal. Requiring
-            // Done gives playback one unambiguous cleanup path.
             .interactiveDismissDisabled()
             .onAppear { isPlayerVisible = true }
         }
         .overlay {
-            if !isAnime4KFullscreen {
+            if !isFullscreen {
                 Anime4KBenchmarkOverlay(
                     controller: anime4KBenchmark,
                     applyMode: selectAnime4KMode
@@ -639,12 +716,13 @@ struct PlayerSheet: View {
             guard player == nil else { return }
             await preparePlayback(requestID: retryToken)
         }
-        .fullScreenCover(isPresented: $isAnime4KFullscreen) {
-            Anime4KFullscreenPlayer(
+        .fullScreenCover(isPresented: $isFullscreen) {
+            FullscreenPlaybackView(
                 player: $player,
                 modeRawValue: $anime4KModeRawValue,
                 benchmark: anime4KBenchmark,
-                isPresented: $isAnime4KFullscreen,
+                pictureInPicture: pictureInPicture,
+                isPresented: $isFullscreen,
                 episodes: episodes,
                 episode: $episode,
                 assetDuration: $assetDuration,
@@ -661,14 +739,6 @@ struct PlayerSheet: View {
         Anime4KPlaybackMode(rawValue: anime4KModeRawValue) ?? .off
     }
 
-    private var anime4KMenu: some View {
-        Anime4KModeMenu(
-            mode: anime4KMode,
-            selectMode: selectAnime4KMode,
-            runBenchmark: runAnime4KBenchmark
-        )
-    }
-
     private func selectAnime4KMode(_ mode: Anime4KPlaybackMode) {
         anime4KModeRawValue = mode.rawValue
     }
@@ -680,7 +750,8 @@ struct PlayerSheet: View {
 
     private func closePlayer() {
         anime4KBenchmark.cancel()
-        isAnime4KFullscreen = false
+        pictureInPicture.stop()
+        isFullscreen = false
         isPlayerVisible = false
         tearDownPlayer()
         dismiss()
@@ -893,11 +964,12 @@ struct PlayerSheet: View {
     }
 }
 
-private struct Anime4KFullscreenPlayer: View {
+private struct FullscreenPlaybackView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var player: AVPlayer?
     @Binding var modeRawValue: String
     @ObservedObject var benchmark: Anime4KBenchmarkController
+    let pictureInPicture: PlaybackPictureInPicture
     @Binding var isPresented: Bool
     let episodes: [Episode]
     @Binding var episode: Episode
@@ -918,14 +990,7 @@ private struct Anime4KFullscreenPlayer: View {
         ZStack(alignment: .bottom) {
             Color.black.ignoresSafeArea()
             if let player, !benchmark.isRunning {
-                Group {
-                    if let preset = mode.preset {
-                        Anime4KVideoPlayer(player: player, preset: preset)
-                            .id("fullscreen-\(mode.rawValue)")
-                    } else {
-                        NativeVideoSurface(player: player)
-                    }
-                }
+                PlaybackSurface(player: player, mode: mode, pictureInPicture: pictureInPicture)
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
             }
@@ -934,12 +999,26 @@ private struct Anime4KFullscreenPlayer: View {
                     Color.clear
                         .contentShape(Rectangle())
                         .onTapGesture { toggleControls() }
-                        .gesture(playbackGesture(width: geometry.size.width, height: geometry.size.height))
+                        .gesture(playbackGesture(size: geometry.size))
+                        .onChange(of: PlayerGestureZone.allowsLevelAdjustment(in: geometry.size)) { _, allowed in
+                            if !allowed {
+                                startingLevel = nil
+                                levelHideTask?.cancel()
+                                level = nil
+                            }
+                        }
                 }
                 if let player {
-                    VStack(alignment: .trailing, spacing: 0) {
+                    PlaybackControls(
+                        player: player,
+                        assetDuration: assetDuration,
+                        areVisible: controlsAreVisible,
+                        onInteraction: scheduleControlFade,
+                        isFullscreen: true,
+                        toggleFullscreen: { isPresented = false }
+                    ) {
                         if let nextEpisode = episodes.nextEpisode(after: episode) {
-                            FullscreenNextEpisodeButton(
+                            NextEpisodeButton(
                                 player: player,
                                 episode: nextEpisode,
                                 assetDuration: assetDuration,
@@ -947,24 +1026,8 @@ private struct Anime4KFullscreenPlayer: View {
                                 isEpisodeComplete: isEpisodeComplete,
                                 action: playNext
                             )
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, controlsAreVisible ? 0 : 16)
-                        }
-                        if controlsAreVisible {
-                            EnhancedVideoControls(
-                                player: player,
-                                isFullscreen: true,
-                                toggleFullscreen: { isPresented = false },
-                                hideControls: { hideControls() },
-                                anime4KMode: mode,
-                                selectAnime4KMode: selectMode,
-                                runAnime4KBenchmark: { benchmark.start(player: player) },
-                                onInteraction: scheduleControlFade
-                            )
-                            .transition(.opacity)
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .trailing)
                     .id(ObjectIdentifier(player))
                     if let level {
                         levelIndicator(level)
@@ -990,7 +1053,44 @@ private struct Anime4KFullscreenPlayer: View {
                 applyMode: selectMode
             )
         }
+        .overlay(alignment: .top) {
+            if let player, controlsAreVisible, !benchmark.isRunning, benchmark.report == nil {
+                HStack {
+                    Button { benchmark.start(player: player) } label: {
+                        Image(systemName: "gauge.with.dots.needle.67percent")
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .accessibilityLabel("Run Device Benchmark")
+                    .background(.regularMaterial, in: Circle())
+
+                    Spacer()
+
+                    HStack(spacing: 6) {
+                        PlaybackOutputControls(pictureInPicture: pictureInPicture, isEnhanced: mode.preset != nil)
+                        Anime4KModeMenu(mode: mode, selectMode: selectMode)
+                        Button { isPresented = false } label: {
+                            Image(systemName: "arrow.down.right.and.arrow.up.left")
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .accessibilityLabel("Exit full screen")
+                    }
+                    .background(.regularMaterial, in: Capsule())
+                }
+                .foregroundStyle(.white)
+                .buttonStyle(.plain)
+                .padding(16)
+                .transition(.opacity)
+            }
+        }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: controlsAreVisible)
+        .onChange(of: isEpisodeComplete) { _, complete in
+            if complete {
+                controlHideTask?.cancel()
+                controlsAreVisible = true
+            }
+        }
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
         .task {
@@ -1028,21 +1128,28 @@ private struct Anime4KFullscreenPlayer: View {
         controlsAreVisible = false
     }
 
-    private func scheduleControlFade() {
+    private func scheduleControlFade(whileScrubbing: Bool = false) {
         controlHideTask?.cancel()
-        guard controlsAreVisible else { return }
+        guard controlsAreVisible, !whileScrubbing, player?.timeControlStatus == .playing else { return }
         controlHideTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(3))
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, player?.timeControlStatus == .playing else { return }
             controlsAreVisible = false
         }
     }
 
-    private func playbackGesture(width: CGFloat, height: CGFloat) -> some Gesture {
+    private func exitOnCenterSwipe(_ translation: CGSize) {
+        if PlayerFullscreenGesture.action(for: translation, isFullscreen: true) == .exit {
+            isPresented = false
+        }
+    }
+
+    private func playbackGesture(size: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 16)
             .onChanged { value in
-                let zone = PlayerGestureZone.at(value.startLocation.x, width: width)
-                guard let player, zone != .center,
+                guard PlayerGestureZone.allowsLevelAdjustment(in: size), let player else { return }
+                let zone = PlayerGestureZone.at(value.startLocation.x, width: size.width)
+                guard zone != .center,
                       startingLevel != nil || PlayerFullscreenGesture.isVertical(value.translation)
                 else { return }
                 let screen = PlaybackOrientation.activeScene?.screen
@@ -1050,7 +1157,7 @@ private struct Anime4KFullscreenPlayer: View {
                 let currentLevel = zone == .brightness ? Double(screen?.brightness ?? 0) : Double(player.volume)
                 let initialLevel = startingLevel ?? currentLevel
                 startingLevel = initialLevel
-                let adjusted = min(max(initialLevel - Double(value.translation.height / max(1, height * 0.75)), 0), 1)
+                let adjusted = min(max(initialLevel - Double(value.translation.height / max(1, size.height * 0.75)), 0), 1)
                 if zone == .brightness {
                     screen?.brightness = CGFloat(adjusted)
                 } else {
@@ -1067,9 +1174,8 @@ private struct Anime4KFullscreenPlayer: View {
             }
             .onEnded { value in
                 startingLevel = nil
-                if PlayerGestureZone.at(value.startLocation.x, width: width) == .center,
-                   PlayerFullscreenGesture.action(for: value.translation, isFullscreen: true) == .exit {
-                    isPresented = false
+                if PlayerGestureZone.at(value.startLocation.x, width: size.width) == .center {
+                    exitOnCenterSwipe(value.translation)
                 }
             }
     }
@@ -1096,7 +1202,7 @@ private struct Anime4KFullscreenPlayer: View {
     }
 }
 
-private struct FullscreenNextEpisodeButton: View {
+private struct NextEpisodeButton: View {
     let player: AVPlayer
     let episode: Episode
     let assetDuration: Double
@@ -1118,7 +1224,8 @@ private struct FullscreenNextEpisodeButton: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .buttonBorderShape(.capsule)
-                .tint(CloudTheme.violet)
+                .tint(.white)
+                .foregroundStyle(.black)
                 .accessibilityHint(Text(episode.name))
             }
         }
@@ -1166,6 +1273,10 @@ enum NextEpisodeTiming {
 enum PlayerGestureZone {
     case volume, center, brightness
 
+    static func allowsLevelAdjustment(in size: CGSize) -> Bool {
+        size.width > size.height
+    }
+
     static func at(_ x: CGFloat, width: CGFloat) -> Self {
         if x < width / 3 { return .volume }
         if x > width * 2 / 3 { return .brightness }
@@ -1193,10 +1304,12 @@ enum PlayerFullscreenGesture {
     }
 }
 
-private struct InlineFullscreenSwipe: UIViewRepresentable {
-    let enterFullscreen: () -> Void
+struct PlaybackFullscreenSwipe: UIViewRepresentable {
+    var isFullscreen = false
+    var onTap: (() -> Void)?
+    let toggleFullscreen: () -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator(enterFullscreen: enterFullscreen) }
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
     func makeUIView(context: Context) -> UIView {
         let view = UIView()
@@ -1204,33 +1317,43 @@ private struct InlineFullscreenSwipe: UIViewRepresentable {
         swipe.maximumNumberOfTouches = 1
         swipe.delegate = context.coordinator
         view.addGestureRecognizer(swipe)
+        if onTap != nil {
+            let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.tapped))
+            tap.require(toFail: swipe)
+            view.addGestureRecognizer(tap)
+        }
         return view
     }
 
     func updateUIView(_ view: UIView, context: Context) {
-        context.coordinator.enterFullscreen = enterFullscreen
+        context.coordinator.parent = self
     }
 
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
-        var enterFullscreen: () -> Void
+        var parent: PlaybackFullscreenSwipe
 
-        init(enterFullscreen: @escaping () -> Void) {
-            self.enterFullscreen = enterFullscreen
+        init(parent: PlaybackFullscreenSwipe) {
+            self.parent = parent
         }
 
         func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
             guard let swipe = gestureRecognizer as? UIPanGestureRecognizer else { return false }
             let velocity = swipe.velocity(in: swipe.view)
-            return velocity.y < 0 && PlayerFullscreenGesture.isVertical(CGSize(width: velocity.x, height: velocity.y))
+            let movesInFullscreenDirection = parent.isFullscreen ? velocity.y > 0 : velocity.y < 0
+            return movesInFullscreenDirection && PlayerFullscreenGesture.isVertical(CGSize(width: velocity.x, height: velocity.y))
         }
 
         @objc func swiped(_ swipe: UIPanGestureRecognizer) {
             guard swipe.state == .ended else { return }
             let distance = swipe.translation(in: swipe.view)
-            if PlayerFullscreenGesture.action(for: CGSize(width: distance.x, height: distance.y), isFullscreen: false) == .enter {
-                enterFullscreen()
+            if PlayerFullscreenGesture.action(
+                for: CGSize(width: distance.x, height: distance.y), isFullscreen: parent.isFullscreen
+            ) != nil {
+                parent.toggleFullscreen()
             }
         }
+
+        @objc func tapped() { parent.onTap?() }
     }
 }
 
@@ -1262,26 +1385,6 @@ private enum PlaybackPresentationError: LocalizedError {
 
     var errorDescription: String? {
         "The episode source exists, but iOS cannot play its current media format or the server rejected the stream."
-    }
-}
-
-private struct NativeVideoPlayer: UIViewControllerRepresentable {
-    let player: AVPlayer
-
-    func makeUIViewController(context: Context) -> AVPlayerViewController {
-        let controller = AVPlayerViewController()
-        controller.player = player
-        controller.showsPlaybackControls = true
-        controller.videoGravity = .resizeAspect
-        controller.allowsPictureInPicturePlayback = true
-        controller.canStartPictureInPictureAutomaticallyFromInline = true
-        controller.entersFullScreenWhenPlaybackBegins = false
-        controller.exitsFullScreenWhenPlaybackEnds = true
-        return controller
-    }
-
-    func updateUIViewController(_ controller: AVPlayerViewController, context: Context) {
-        controller.player = player
     }
 }
 

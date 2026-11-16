@@ -65,6 +65,8 @@ final class AnimeCloudTests: XCTestCase {
         XCTAssertEqual(PlayerGestureZone.at(90, width: 900), .volume)
         XCTAssertEqual(PlayerGestureZone.at(450, width: 900), .center)
         XCTAssertEqual(PlayerGestureZone.at(810, width: 900), .brightness)
+        XCTAssertFalse(PlayerGestureZone.allowsLevelAdjustment(in: CGSize(width: 393, height: 852)))
+        XCTAssertTrue(PlayerGestureZone.allowsLevelAdjustment(in: CGSize(width: 852, height: 393)))
         XCTAssertFalse(PlayerFullscreenGesture.isVertical(CGSize(width: 80, height: 15)))
     }
 
