@@ -5,8 +5,10 @@ struct DownloadSelectionView: View {
 
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var downloads: EpisodeDownloads
+    let library: LibraryStore
     let anime: Anime
     let catalog: [Episode]
+    @State private var watchedEpisodeIDs: Set<String> = []
     @State private var selected: Set<String> = []
     @State private var fromEpisode = ""
     @State private var toEpisode = ""
@@ -36,11 +38,28 @@ struct DownloadSelectionView: View {
                     ForEach(visibleEpisodes) { episode in
                         let status = downloads.records[episode.id]?.status
                         let selectable = canSelect(episode)
+                        let isWatched = watchedEpisodeIDs.contains(episode.id)
                         Button {
                             if selected.remove(episode.id) == nil { selected.insert(episode.id) }
                         } label: {
                             HStack {
-                                Text(episode.name)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(episode.name)
+                                    if episode.isFiller || isWatched {
+                                        HStack(spacing: 8) {
+                                            if episode.isFiller {
+                                                Label("Filler", systemImage: "sparkles")
+                                                    .foregroundStyle(.orange)
+                                            }
+                                            if isWatched {
+                                                Label("Watched", systemImage: "checkmark")
+                                                    .foregroundStyle(CloudTheme.cyan)
+                                            }
+                                        }
+                                        .font(.caption2.weight(.semibold))
+                                        .accessibilityHidden(true)
+                                    }
+                                }
                                 Spacer()
                                 if selectable {
                                     Image(systemName: selected.contains(episode.id) ? "checkmark.circle.fill" : "circle")
@@ -56,6 +75,8 @@ struct DownloadSelectionView: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(!selectable)
+                        .accessibilityLabel(episode.name)
+                        .accessibilityValue(downloadRowStatus(episode, isWatched: isWatched, status: status))
                         .accessibilityAddTraits(selected.contains(episode.id) ? .isSelected : [])
                         .listRowBackground(CloudTheme.panel)
                     }
@@ -84,6 +105,22 @@ struct DownloadSelectionView: View {
                 .background(.regularMaterial)
             }
         }
+        .onAppear { watchedEpisodeIDs = library.seenEpisodeIDs }
+        .onReceive(library.seenStatusChanged) { change in
+            if change.isSeen {
+                watchedEpisodeIDs.insert(change.episodeID)
+            } else {
+                watchedEpisodeIDs.remove(change.episodeID)
+            }
+        }
+    }
+
+    private func downloadRowStatus(_ episode: Episode, isWatched: Bool, status: EpisodeDownload.Status?) -> String {
+        var descriptions: [String] = []
+        if episode.isFiller { descriptions.append("Filler") }
+        if isWatched { descriptions.append("Watched") }
+        if !canSelect(episode) { descriptions.append(status == .ready ? "Downloaded" : "Queued") }
+        return descriptions.joined(separator: ", ")
     }
 
     private var rangeFilter: some View {
@@ -260,7 +297,11 @@ private struct DownloadedAnimeView: View {
             CloudBackground()
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    AnimeDetailHero(anime: anime, cachedArtworkURL: downloads.artworkURL(for: anime.id)) {
+                    AnimeDetailHero(
+                        anime: anime,
+                        cachedArtworkURL: downloads.artworkURL(for: anime.id),
+                        playbackMenu: AnimePlaybackMenu(animeID: anime.id, progress: progress, episodeIDs: Set(records.map(\.id)))
+                    ) {
                         HStack(spacing: 12) {
                             if let record = resumeOrNext {
                                 Button { selected = record } label: {
@@ -270,7 +311,6 @@ private struct DownloadedAnimeView: View {
                                 .buttonStyle(PrimaryCapsuleStyle())
                             }
                             LibrarySaveMenu(anime: anime, store: library, size: 48)
-                            AnimePlaybackMenu(animeID: anime.id, progress: progress, episodeIDs: Set(records.map(\.id)))
                         }
                     }
                     VStack(alignment: .leading, spacing: 14) {

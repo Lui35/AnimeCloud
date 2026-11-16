@@ -19,7 +19,7 @@ A native SwiftUI client for discovering, tracking, and watching anime from the A
 ## Highlights
 
 - Live home, discovery, weekly schedule, title details, episodes, comments, and playback
-- Native video controls with fullscreen playback, AirPlay, Picture in Picture, and per-episode resume positions
+- Shared player controls with fullscreen gestures, AirPlay, Picture in Picture in standard mode, and per-episode resume positions
 - Optional real-time Anime4K Metal upscaling with all Fast and High Quality presets
 - Favorites, Watched, Watch Later, Watching Now, watch history, and legacy-compatible cloud sync
 - Episode-level watched state, automatic Up Next handling, replay, and all-caught-up states
@@ -79,11 +79,11 @@ The resulting file is written to `Build/Unsigned/AnimeCloud-unsigned.ipa`.
 
 ## Anime4K playback
 
-AnimeCloud can upscale video in real time with Anime4K shaders running on the device's Metal GPU. Open the sparkle menu in the player to choose **Off**, any **Fast** preset, or any **High Quality** preset. The available presets are A, B, C, A+A, B+B, and C+A in both quality tiers. Selecting **Off** returns to the native player.
+AnimeCloud can upscale video in real time with Anime4K shaders running on the device's Metal GPU. Open the sparkle menu in the top-right controls to choose **Off**, any **Fast** preset, or any **High Quality** preset. The available presets are A, B, C, A+A, B+B, and C+A in both quality tiers. Selecting **Off** plays the original video with the same controls.
 
-The same menu is available before and during fullscreen playback, so the mode can be changed without leaving fullscreen. Fullscreen controls can be hidden with the chevron and shown again by tapping the video.
+The same menu is available before and during fullscreen playback, so the mode can be changed without leaving fullscreen. Swipe up on the video to enter fullscreen and swipe down in the center to exit. In landscape fullscreen, swipe vertically on the left for playback volume or on the right for brightness. Tap the video to show or hide the controls.
 
-Choose **Run Device Benchmark** from the Anime4K menu to test all 12 presets at the current display target. Playback pauses during the test and resumes afterward. The result shows average and worst processing times, recommends the highest-quality preset that can sustain 30 fps with headroom, and provides a **Use Recommended** action.
+Use the gauge button in the top-left corner to run the device benchmark. It tests all 12 presets at the current display target, pauses playback during the test, and resumes it afterward. The result shows average and worst processing times, recommends the highest-quality preset that can sustain 30 fps with headroom, and provides a **Use Recommended** action.
 
 Run the benchmark on the physical iPhone or iPad you intend to use. A simulator benchmark measures the Mac's GPU and is not representative of performance on the iOS device.
 

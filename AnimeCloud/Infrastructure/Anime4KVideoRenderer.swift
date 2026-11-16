@@ -1,5 +1,6 @@
 import Anime4KMetal
 import AVFoundation
+import AVKit
 import CoreImage
 import MetalKit
 import SwiftUI
@@ -55,16 +56,6 @@ enum Anime4KPlaybackMode: String, CaseIterable, Identifiable, Sendable {
         case .modeAAHQ: "Mode A+A"
         case .modeBBHQ: "Mode B+B"
         case .modeCAHQ: "Mode C+A"
-        }
-    }
-
-    var compactName: String {
-        switch self {
-        case .off: "Anime4K Off"
-        case .modeAFast, .modeBFast, .modeCFast, .modeAAFast, .modeBBFast, .modeCAFast:
-            "Anime4K Fast"
-        case .modeAHQ, .modeBHQ, .modeCHQ, .modeAAHQ, .modeBBHQ, .modeCAHQ:
-            "Anime4K HQ"
         }
     }
 
@@ -308,8 +299,6 @@ final class Anime4KBenchmarkController: ObservableObject {
 struct Anime4KModeMenu: View {
     let mode: Anime4KPlaybackMode
     let selectMode: (Anime4KPlaybackMode) -> Void
-    let runBenchmark: () -> Void
-    var iconOnly = false
 
     var body: some View {
         Menu {
@@ -320,18 +309,11 @@ struct Anime4KModeMenu: View {
             Section("High Quality") {
                 ForEach(Anime4KPlaybackMode.highQualityModes) { mode in modeButton(mode) }
             }
-            Section("Device") {
-                Button(action: runBenchmark) {
-                    Label("Run Device Benchmark", systemImage: "gauge.with.dots.needle.67percent")
-                }
-            }
         } label: {
-            if iconOnly {
-                Image(systemName: "sparkles.tv")
-                    .frame(width: 36, height: 36)
-            } else {
-                Label(mode.compactName, systemImage: "sparkles.tv")
-            }
+            Image(systemName: "sparkles.tv")
+                .foregroundStyle(mode.preset == nil ? .white : CloudTheme.cyan)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
         }
         .accessibilityLabel("Anime4K enhancement: \(mode.fullDisplayName)")
     }
@@ -344,6 +326,7 @@ struct Anime4KModeMenu: View {
                 Text(candidate.displayName)
             }
         }
+        .accessibilityLabel(candidate.fullDisplayName)
     }
 }
 
@@ -592,11 +575,28 @@ struct Anime4KVideoPlayer: UIViewRepresentable {
     }
 }
 
-struct NativeVideoSurface: UIViewRepresentable {
+struct PlaybackSurface: View {
     let player: AVPlayer
+    let mode: Anime4KPlaybackMode
+    let pictureInPicture: PlaybackPictureInPicture
+
+    var body: some View {
+        if let preset = mode.preset {
+            Anime4KVideoPlayer(player: player, preset: preset)
+                .id(mode)
+        } else {
+            StandardVideoSurface(player: player, pictureInPicture: pictureInPicture)
+        }
+    }
+}
+
+private struct StandardVideoSurface: UIViewRepresentable {
+    let player: AVPlayer
+    let pictureInPicture: PlaybackPictureInPicture
 
     func makeUIView(context: Context) -> PlayerLayerView {
         let view = PlayerLayerView()
+        view.pictureInPicture = pictureInPicture
         view.playerLayer.player = player
         view.playerLayer.videoGravity = .resizeAspect
         return view
@@ -610,6 +610,95 @@ struct NativeVideoSurface: UIViewRepresentable {
 final class PlayerLayerView: UIView {
     override class var layerClass: AnyClass { AVPlayerLayer.self }
     var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
+    weak var pictureInPicture: PlaybackPictureInPicture?
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window != nil {
+            pictureInPicture?.attach(to: playerLayer)
+        } else {
+            pictureInPicture?.detach(from: playerLayer)
+        }
+    }
+}
+
+@MainActor
+final class PlaybackPictureInPicture: NSObject, ObservableObject, AVPictureInPictureControllerDelegate {
+    @Published private(set) var isAvailable = false
+    private weak var layer: AVPlayerLayer?
+    private var controller: AVPictureInPictureController?
+    private var availability: NSKeyValueObservation?
+
+    func attach(to layer: AVPlayerLayer) {
+        guard self.layer !== layer, AVPictureInPictureController.isPictureInPictureSupported(),
+              let controller = AVPictureInPictureController(playerLayer: layer) else { return }
+        stop()
+        self.layer = layer
+        self.controller = controller
+        controller.delegate = self
+        controller.canStartPictureInPictureAutomaticallyFromInline = true
+        availability = controller.observe(\.isPictureInPicturePossible, options: [.initial, .new]) { [weak self] _, _ in
+            Task { @MainActor in
+                self?.isAvailable = self?.controller?.isPictureInPicturePossible == true
+            }
+        }
+    }
+
+    func detach(from layer: AVPlayerLayer) {
+        guard self.layer === layer else { return }
+        stop()
+        availability = nil
+        controller = nil
+        self.layer = nil
+        Task { @MainActor in
+            isAvailable = controller?.isPictureInPicturePossible == true
+        }
+    }
+
+    func start() {
+        guard let controller, controller.isPictureInPicturePossible else { return }
+        controller.startPictureInPicture()
+    }
+
+    func stop() {
+        if controller?.isPictureInPictureActive == true { controller?.stopPictureInPicture() }
+    }
+
+    nonisolated func pictureInPictureController(
+        _ pictureInPictureController: AVPictureInPictureController,
+        restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void
+    ) {
+        Task { @MainActor in completionHandler(layer != nil) }
+    }
+}
+
+struct PlaybackOutputControls: View {
+    @ObservedObject var pictureInPicture: PlaybackPictureInPicture
+    let isEnhanced: Bool
+
+    var body: some View {
+        AirPlayPicker().frame(width: 44, height: 44)
+        if !isEnhanced && pictureInPicture.isAvailable {
+            Button(action: pictureInPicture.start) {
+                Image(systemName: "pip.enter")
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Start Picture in Picture")
+        }
+    }
+}
+
+private struct AirPlayPicker: UIViewRepresentable {
+    func makeUIView(context: Context) -> AVRoutePickerView {
+        let picker = AVRoutePickerView()
+        picker.prioritizesVideoDevices = true
+        picker.tintColor = .white
+        picker.activeTintColor = UIColor(CloudTheme.cyan)
+        return picker
+    }
+
+    func updateUIView(_ picker: AVRoutePickerView, context: Context) {}
 }
 
 final class Anime4KRenderView: MTKView {
@@ -687,15 +776,14 @@ final class Anime4KRenderView: MTKView {
     }
 }
 
-struct EnhancedVideoControls: View {
+struct PlaybackControls<NextEpisode: View>: View {
     let player: AVPlayer
+    let assetDuration: Double
+    let areVisible: Bool
+    let onInteraction: (Bool) -> Void
     let isFullscreen: Bool
     let toggleFullscreen: () -> Void
-    let hideControls: (() -> Void)?
-    let anime4KMode: Anime4KPlaybackMode?
-    let selectAnime4KMode: ((Anime4KPlaybackMode) -> Void)?
-    let runAnime4KBenchmark: (() -> Void)?
-    let onInteraction: () -> Void
+    @ViewBuilder let nextEpisode: () -> NextEpisode
     @State private var isPlaying = true
     @State private var currentTime = 0.0
     @State private var duration = 0.0
@@ -703,78 +791,87 @@ struct EnhancedVideoControls: View {
     @State private var timeObserver: Any?
 
     var body: some View {
-        VStack(spacing: 12) {
-            ZStack {
-                HStack(spacing: 34) {
-                    Button { skip(by: -10) } label: {
-                        Image(systemName: "gobackward.10")
-                    }
-                    Button { togglePlayback() } label: {
-                        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                            .font(.title2)
-                            .frame(width: 36, height: 36)
-                    }
-                    Button { skip(by: 10) } label: {
-                        Image(systemName: "goforward.10")
-                    }
-                }
-
-                HStack {
-                    if let hideControls {
-                        Button(action: hideControls) {
-                            Image(systemName: "chevron.down")
-                                .frame(width: 36, height: 36)
-                        }
-                        .accessibilityLabel("Hide playback controls")
-                    }
-                    if let anime4KMode,
-                       let selectAnime4KMode,
-                       let runAnime4KBenchmark {
-                        Anime4KModeMenu(
-                            mode: anime4KMode,
-                            selectMode: selectAnime4KMode,
-                            runBenchmark: runAnime4KBenchmark,
-                            iconOnly: true
-                        )
-                    }
-                    Spacer()
-                    Button(action: toggleFullscreen) {
-                        Image(systemName: isFullscreen
-                            ? "arrow.down.right.and.arrow.up.left"
-                            : "arrow.up.left.and.arrow.down.right")
-                            .frame(width: 36, height: 36)
-                    }
-                    .accessibilityLabel(isFullscreen ? "Exit full screen" : "Enter full screen")
-                }
+        ZStack {
+            if areVisible {
+                Color.black.opacity(0.15).allowsHitTesting(false)
+                transport
             }
-            .font(.title3.weight(.semibold))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .bottom) {
+            VStack(alignment: .trailing, spacing: 10) {
+                nextEpisode()
+                if areVisible { timeline }
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 16)
+        }
+        .foregroundStyle(.white)
+        .onAppear(perform: installTimeObserver)
+        .onDisappear(perform: removeTimeObserver)
+        .onChange(of: isPlaying) { _, _ in onInteraction(isScrubbing) }
+    }
 
-            HStack(spacing: 10) {
+    private var transport: some View {
+        HStack(spacing: 24) {
+            transportButton("Go back 15 seconds", icon: "gobackward.15", size: 56) { skip(by: -15) }
+            transportButton(isPlaying ? "Pause" : "Play", icon: isPlaying ? "pause.fill" : "play.fill", size: 76) {
+                togglePlayback()
+            }
+            .overlay {
+                PlaybackFullscreenSwipe(isFullscreen: isFullscreen, onTap: {
+                    togglePlayback()
+                    onInteraction(false)
+                }, toggleFullscreen: toggleFullscreen)
+                .accessibilityHidden(true)
+            }
+            transportButton("Go forward 15 seconds", icon: "goforward.15", size: 56) { skip(by: 15) }
+        }
+    }
+
+    private func transportButton(_ title: String, icon: String, size: CGFloat, action: @escaping () -> Void) -> some View {
+        Button {
+            action()
+            onInteraction(false)
+        } label: {
+            Image(systemName: icon)
+                .font(.system(size: size * 0.43, weight: .medium))
+                .frame(width: size, height: size)
+                .background(.regularMaterial, in: Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+    }
+
+    private var timeline: some View {
+        VStack(spacing: 0) {
+            Slider(
+                value: $currentTime,
+                in: 0...max(duration, 1),
+                onEditingChanged: scrubStateChanged
+            )
+            .tint(.white)
+            .accessibilityLabel("Playback position")
+            .accessibilityValue(PlaybackTimeFormatter.string(currentTime))
+            HStack {
                 Text(PlaybackTimeFormatter.string(currentTime))
-                Slider(
-                    value: $currentTime,
-                    in: 0...max(duration, 1),
-                    onEditingChanged: scrubStateChanged
-                )
+                Spacer()
                 Text("−\(PlaybackTimeFormatter.string(max(0, duration - currentTime)))")
             }
             .font(.caption.monospacedDigit())
+            .accessibilityHidden(true)
         }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 18)
-        .padding(.vertical, 14)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .padding(16)
-        .onAppear(perform: installTimeObserver)
-        .onDisappear(perform: removeTimeObserver)
-        .simultaneousGesture(TapGesture().onEnded(onInteraction))
-        .onChange(of: currentTime) { _, _ in
-            if isScrubbing { onInteraction() }
-        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 18))
     }
 
     private func installTimeObserver() {
         guard timeObserver == nil else { return }
+        duration = assetDuration
+        let position = player.currentTime().seconds
+        currentTime = position.isFinite ? position : 0
         isPlaying = player.timeControlStatus == .playing
         timeObserver = player.addPeriodicTimeObserver(
             forInterval: CMTime(seconds: 0.25, preferredTimescale: 600),
@@ -783,7 +880,7 @@ struct EnhancedVideoControls: View {
             guard !isScrubbing else { return }
             currentTime = time.seconds.isFinite ? time.seconds : 0
             let itemDuration = player.currentItem?.duration.seconds ?? 0
-            duration = itemDuration.isFinite ? itemDuration : 0
+            duration = itemDuration.isFinite && itemDuration > 0 ? itemDuration : assetDuration
             isPlaying = player.timeControlStatus == .playing
         }
     }
@@ -804,13 +901,15 @@ struct EnhancedVideoControls: View {
     }
 
     private func skip(by seconds: Double) {
-        let target = min(max(0, player.currentTime().seconds + seconds), max(duration, 0))
-        player.seek(to: CMTime(seconds: target, preferredTimescale: 600))
+        let position = player.currentTime().seconds
+        guard position.isFinite, duration > 0 else { return }
+        let target = min(max(0, position + seconds), duration)
+        player.seek(to: CMTime(seconds: target, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
     }
 
     private func scrubStateChanged(_ editing: Bool) {
-        onInteraction()
         isScrubbing = editing
+        onInteraction(editing)
         guard !editing else { return }
         player.seek(to: CMTime(seconds: currentTime, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
     }
