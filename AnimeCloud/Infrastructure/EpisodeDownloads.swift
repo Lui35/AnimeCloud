@@ -134,6 +134,19 @@ final class EpisodeDownloads: NSObject, ObservableObject {
         }
     }
 
+    func removeAll(forAnimeID animeID: String) throws {
+        let episodeIDs = records.values.filter { $0.anime.id == animeID }.map(\.id)
+        var firstError: Error?
+        for episodeID in episodeIDs {
+            do {
+                try remove(episodeID)
+            } catch {
+                if firstError == nil { firstError = error }
+            }
+        }
+        if let firstError { throw firstError }
+    }
+
     func localURL(for episodeID: String) -> URL? {
         guard let record = records[episodeID], record.status == .ready,
               let url = mediaURL(for: record), FileManager.default.fileExists(atPath: url.path) else { return nil }
