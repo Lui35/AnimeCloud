@@ -101,14 +101,9 @@ Cloud synchronization is download-first. The first login for an account is resto
 
 ## Continuous integration and releases
 
-The `main` branch is protected. Pull requests and pushes run **Main CI / Build and test**, which:
+The `main` branch is protected. Pull requests targeting `main` and pushes to `main` run **Main CI / Build and test**, which builds the app and runs its unit tests on an available iPhone simulator.
 
-1. Builds the app and runs its unit tests on an available iPhone simulator.
-2. Builds the arm64 device application with code signing disabled.
-3. Packages and validates the unsigned IPA.
-4. Uploads the IPA as a workflow artifact for 14 days.
-
-Pushing a semantic version tag such as `v1.0.0`, or manually running the release workflow with that tag, creates a GitHub Release. The workflow uploads the IPA and checksum and then verifies both assets are present on the release.
+Pushing a semantic version tag such as `v1.0.0`, or manually running the release workflow with that tag, builds and validates the unsigned IPA. The workflow uploads the IPA and checksum to the GitHub Release and verifies both assets are present.
 
 ## Project structure
 
