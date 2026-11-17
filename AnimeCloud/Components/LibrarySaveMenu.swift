@@ -7,21 +7,7 @@ struct LibrarySaveMenu: View {
 
     var body: some View {
         Menu {
-            Section("Save to library") {
-                ForEach(LibraryCategory.allCases) { category in
-                    Button {
-                        store.setCategory(category, for: anime)
-                    } label: {
-                        Label(category.title, systemImage: store.category(for: anime) == category ? "checkmark" : category.icon)
-                    }
-                }
-            }
-            if store.isSaved(anime) {
-                Divider()
-                Button("Remove from Library", systemImage: "trash", role: .destructive) {
-                    store.setCategory(nil, for: anime)
-                }
-            }
+            LibraryCategoryActions(anime: anime, store: store)
         } label: {
             Image(systemName: store.category(for: anime)?.icon ?? "plus")
                 .foregroundStyle(store.isSaved(anime) ? CloudTheme.coral : .white)
@@ -29,5 +15,28 @@ struct LibrarySaveMenu: View {
                 .background(.ultraThinMaterial, in: Circle())
         }
         .accessibilityLabel(store.category(for: anime).map { "Saved in \($0.title)" } ?? "Save to library")
+    }
+}
+
+struct LibraryCategoryActions: View {
+    let anime: Anime
+    @ObservedObject var store: LibraryStore
+
+    var body: some View {
+        Section("Save to library") {
+            ForEach(LibraryCategory.allCases) { category in
+                Button {
+                    store.setCategory(category, for: anime)
+                } label: {
+                    Label(category.title, systemImage: store.category(for: anime) == category ? "checkmark" : category.icon)
+                }
+            }
+        }
+        if store.isSaved(anime) {
+            Divider()
+            Button("Remove from Library", systemImage: "trash", role: .destructive) {
+                store.setCategory(nil, for: anime)
+            }
+        }
     }
 }

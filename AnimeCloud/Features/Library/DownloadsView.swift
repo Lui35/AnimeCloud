@@ -30,6 +30,10 @@ struct DownloadSelectionView: View {
                     .listRowBackground(CloudTheme.panel)
                     rangeFilter
                         .listRowBackground(CloudTheme.panel)
+                    if !selectableVisibleIDs.isEmpty {
+                        bulkSelection
+                            .listRowBackground(CloudTheme.panel)
+                    }
                     if visibleEpisodes.isEmpty {
                         Text("No episodes in this range.")
                             .foregroundStyle(CloudTheme.muted)
@@ -42,25 +46,19 @@ struct DownloadSelectionView: View {
                         Button {
                             if selected.remove(episode.id) == nil { selected.insert(episode.id) }
                         } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(episode.name)
-                                    if episode.isFiller || isWatched {
-                                        HStack(spacing: 8) {
-                                            if episode.isFiller {
-                                                Label("Filler", systemImage: "sparkles")
-                                                    .foregroundStyle(.orange)
-                                            }
-                                            if isWatched {
-                                                Label("Watched", systemImage: "checkmark")
-                                                    .foregroundStyle(CloudTheme.cyan)
-                                            }
-                                        }
-                                        .font(.caption2.weight(.semibold))
-                                        .accessibilityHidden(true)
-                                    }
-                                }
+                            HStack(spacing: 12) {
+                                Text(episode.name)
                                 Spacer()
+                                HStack(spacing: 8) {
+                                    Image(systemName: "sparkles")
+                                        .foregroundStyle(.orange)
+                                        .opacity(episode.isFiller ? 1 : 0)
+                                    Image(systemName: "eye.fill")
+                                        .foregroundStyle(CloudTheme.cyan)
+                                        .opacity(isWatched ? 1 : 0)
+                                }
+                                .font(.caption.weight(.semibold))
+                                .accessibilityHidden(true)
                                 if selectable {
                                     Image(systemName: selected.contains(episode.id) ? "checkmark.circle.fill" : "circle")
                                         .foregroundStyle(CloudTheme.cyan)
@@ -124,9 +122,7 @@ struct DownloadSelectionView: View {
     }
 
     private var rangeFilter: some View {
-        let availableIDs = episodeRange == nil ? [] : visibleEpisodes.filter(canSelect).map(\.id)
-        let allSelected = !availableIDs.isEmpty && availableIDs.allSatisfy(selected.contains)
-        return DisclosureGroup(episodeRange.map { "Episodes \($0.lowerBound)–\($0.upperBound)" } ?? "Episode range") {
+        DisclosureGroup(episodeRange.map { "Episodes \($0.lowerBound)–\($0.upperBound)" } ?? "Episode range") {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 12) {
                     TextField("From", text: $fromEpisode)
@@ -155,16 +151,6 @@ struct DownloadSelectionView: View {
                     }
                 }
                 .buttonStyle(.borderless)
-                if !availableIDs.isEmpty {
-                    Button(allSelected ? "Deselect all in range" : "Select all in range") {
-                        if allSelected {
-                            selected.subtract(availableIDs)
-                        } else {
-                            selected.formUnion(availableIDs)
-                        }
-                    }
-                    .buttonStyle(.borderless)
-                }
                 if !fromEpisode.isEmpty && !toEpisode.isEmpty && inputRange == nil {
                     Text("Enter a valid range, with the smaller episode number first.")
                         .font(.caption)
@@ -173,6 +159,30 @@ struct DownloadSelectionView: View {
             }
             .padding(.vertical, 8)
         }
+    }
+
+    private var selectableVisibleIDs: Set<String> {
+        Set(visibleEpisodes.filter(canSelect).map(\.id))
+    }
+
+    private var bulkSelection: some View {
+        let ids = selectableVisibleIDs
+        let allSelected = ids.isSubset(of: selected)
+        let action = allSelected ? "Deselect all" : "Select all"
+        let title = episodeRange == nil ? action : "\(action) in range"
+        return Button {
+            if allSelected {
+                selected.subtract(ids)
+            } else {
+                selected.formUnion(ids)
+            }
+        } label: {
+            Label(title, systemImage: allSelected ? "minus.circle" : "checkmark.circle")
+                .foregroundStyle(CloudTheme.cyan)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private var inputRange: ClosedRange<Int>? {

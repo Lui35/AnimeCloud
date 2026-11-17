@@ -306,14 +306,15 @@ private struct RelatedAnimeView: View {
                 ScrollView {
                     LazyVGrid(columns: columns, alignment: .leading, spacing: 22) {
                         ForEach(items) { related in
-                            VStack(alignment: .leading, spacing: 6) {
+                            ZStack(alignment: .topLeading) {
                                 NavigationLink {
                                     AnimeDetailView(anime: related, library: library)
                                 } label: {
                                     PosterView(anime: related, width: 142, height: 204)
                                 }
                                 .buttonStyle(.plain)
-                                watchLaterAction(for: related)
+                                watchLaterBookmark(for: related)
+                                    .padding(4)
                             }
                         }
                     }
@@ -327,27 +328,41 @@ private struct RelatedAnimeView: View {
     }
 
     @ViewBuilder
-    private func watchLaterAction(for related: Anime) -> some View {
+    private func watchLaterBookmark(for related: Anime) -> some View {
         let category = library.category(for: related)
-        if let category, category != .favorites {
-            Label(category.title, systemImage: category == .watchLater ? "checkmark" : category.icon)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(CloudTheme.muted)
-                .frame(minHeight: 44)
-        } else {
-            Button {
-                library.setCategory(.watchLater, for: related)
-            } label: {
-                Label(LibraryCategory.watchLater.title, systemImage: LibraryCategory.watchLater.icon)
-                    .font(.footnote.weight(.semibold))
-                    .padding(.horizontal, 12)
-                    .frame(minHeight: 44)
-                    .background(.ultraThinMaterial, in: Capsule())
+        let isBookmarked = category == .watchLater
+        let badge = posterBadge(isBookmarked ? "bookmark.fill" : category?.icon ?? "plus")
+            .foregroundStyle(category == nil ? .white : CloudTheme.cyan)
+
+        Group {
+            if let category, category != .watchLater {
+                Menu {
+                    LibraryCategoryActions(anime: related, store: library)
+                } label: {
+                    badge
+                }
+                .accessibilityLabel("Saved in \(category.title): \(related.name)")
+            } else {
+                Menu {
+                    LibraryCategoryActions(anime: related, store: library)
+                } label: {
+                    badge
+                } primaryAction: {
+                    library.setCategory(isBookmarked ? nil : .watchLater, for: related)
+                }
+                .accessibilityLabel(isBookmarked ? "Remove \(related.name) from Watch Later" : "Add \(related.name) to Watch Later")
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(CloudTheme.cyan)
-            .accessibilityLabel("Add \(related.name) to Watch Later")
         }
+        .buttonStyle(.plain)
+    }
+
+    private func posterBadge(_ icon: String) -> some View {
+        Image(systemName: icon)
+            .font(.subheadline.weight(.semibold))
+            .frame(width: 32, height: 32)
+            .background(.black.opacity(0.72), in: Circle())
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
     }
 
     private func load() async {
@@ -627,14 +642,15 @@ struct PlayerSheet: View {
                         ZStack(alignment: .bottom) {
                             PlaybackSurface(player: player, mode: anime4KMode, pictureInPicture: pictureInPicture)
                                 .allowsHitTesting(false)
-                            PlaybackFullscreenSwipe { isFullscreen = true }
+                            PlaybackFullscreenSwipe(onSwipeDown: closePlayer) { isFullscreen = true }
                             PlaybackControls(
                                 player: player,
                                 assetDuration: assetDuration,
                                 areVisible: true,
                                 onInteraction: { _ in },
                                 isFullscreen: false,
-                                toggleFullscreen: { isFullscreen = true }
+                                toggleFullscreen: { isFullscreen = true },
+                                onSwipeDown: closePlayer
                             ) {
                                 if !showingUpNext, let nextEpisode {
                                     NextEpisodeButton(
@@ -685,20 +701,18 @@ struct PlayerSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    if !isFullscreen {
-                        Button("Run Device Benchmark", systemImage: "gauge.with.dots.needle.67percent", action: runAnime4KBenchmark)
-                            .labelStyle(.iconOnly)
-                            .disabled(player == nil)
-                    }
+                    Button("Close player", systemImage: "xmark", action: closePlayer)
+                        .labelStyle(.iconOnly)
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     if player != nil, !isFullscreen {
+                        Button("Run Device Benchmark", systemImage: "gauge.with.dots.needle.67percent", action: runAnime4KBenchmark)
+                            .labelStyle(.iconOnly)
                         Anime4KModeMenu(mode: anime4KMode, selectMode: selectAnime4KMode)
                         PlaybackOutputControls(pictureInPicture: pictureInPicture, isEnhanced: anime4KMode.preset != nil)
                         Button("Enter full screen", systemImage: "arrow.up.left.and.arrow.down.right") { isFullscreen = true }
                             .labelStyle(.iconOnly)
                     }
-                    Button("Done") { closePlayer() }
                 }
             }
             .interactiveDismissDisabled()
@@ -819,9 +833,10 @@ struct PlayerSheet: View {
                 Text("Up next").font(.title2.bold())
                 Text(nextEpisode.name).font(.headline).foregroundStyle(.white.opacity(0.78))
                 HStack(spacing: 10) {
+                    Spacer()
+                    EpisodeTypeBadge(episode: nextEpisode)
                     Button { playNextEpisode() } label: { Label("Play Next", systemImage: "forward.fill") }
                         .buttonStyle(.borderedProminent).tint(CloudTheme.violet)
-                    EpisodeTypeBadge(episode: nextEpisode)
                 }
             } else {
                 Text(downloadedPlayback ? "No more downloaded episodes" : "You’re all caught up").font(.title2.bold())
@@ -1307,6 +1322,7 @@ enum PlayerFullscreenGesture {
 struct PlaybackFullscreenSwipe: UIViewRepresentable {
     var isFullscreen = false
     var onTap: (() -> Void)?
+    var onSwipeDown: (() -> Void)?
     let toggleFullscreen: () -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
@@ -1339,17 +1355,18 @@ struct PlaybackFullscreenSwipe: UIViewRepresentable {
         func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
             guard let swipe = gestureRecognizer as? UIPanGestureRecognizer else { return false }
             let velocity = swipe.velocity(in: swipe.view)
-            let movesInFullscreenDirection = parent.isFullscreen ? velocity.y > 0 : velocity.y < 0
-            return movesInFullscreenDirection && PlayerFullscreenGesture.isVertical(CGSize(width: velocity.x, height: velocity.y))
+            let supportsDirection = velocity.y > 0 ? parent.isFullscreen || parent.onSwipeDown != nil : !parent.isFullscreen
+            return supportsDirection && PlayerFullscreenGesture.isVertical(CGSize(width: velocity.x, height: velocity.y))
         }
 
         @objc func swiped(_ swipe: UIPanGestureRecognizer) {
             guard swipe.state == .ended else { return }
             let distance = swipe.translation(in: swipe.view)
-            if PlayerFullscreenGesture.action(
-                for: CGSize(width: distance.x, height: distance.y), isFullscreen: parent.isFullscreen
-            ) != nil {
+            let translation = CGSize(width: distance.x, height: distance.y)
+            if PlayerFullscreenGesture.action(for: translation, isFullscreen: parent.isFullscreen) != nil {
                 parent.toggleFullscreen()
+            } else if PlayerFullscreenGesture.action(for: translation, isFullscreen: true) == .exit {
+                parent.onSwipeDown?()
             }
         }
 
