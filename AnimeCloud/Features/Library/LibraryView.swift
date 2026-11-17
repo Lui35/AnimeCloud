@@ -7,7 +7,6 @@ struct LibraryView: View {
     @AppStorage("library.defaultCategory") private var defaultCategory: LibraryCategory = .watchingNow
     @State private var selection: LibraryCategory = .watchingNow
 
-    private let columns = [GridItem(.adaptive(minimum: 145), spacing: 16)]
     private let categories: [LibraryCategory] = [.watchingNow, .watchLater, .watched, .favorites]
 
     var body: some View {
@@ -36,8 +35,11 @@ struct LibraryView: View {
                         EmptyCloud(title: emptyTitle, detail: emptyDetail, systemImage: selection.icon)
                     } else {
                         ScrollView {
-                            LazyVGrid(columns: columns, alignment: .leading, spacing: 22) {
-                                ForEach(items) { anime in NavigationLink(value: anime) { PosterView(anime: anime, width: 154, height: 220) }.buttonStyle(.plain) }
+                            PosterGrid {
+                                ForEach(items) { anime in
+                                    NavigationLink(value: anime) { PosterView(anime: anime) }
+                                        .buttonStyle(.plain)
+                                }
                             }.padding(18).padding(.bottom, 100)
                         }
                     }

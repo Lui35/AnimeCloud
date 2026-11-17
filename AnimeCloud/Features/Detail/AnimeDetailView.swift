@@ -283,8 +283,6 @@ private struct RelatedAnimeView: View {
     @State private var errorMessage: String?
     @State private var reloadToken = UUID()
 
-    private let columns = [GridItem(.adaptive(minimum: 142), spacing: 16)]
-
     var body: some View {
         ZStack {
             CloudBackground()
@@ -304,13 +302,13 @@ private struct RelatedAnimeView: View {
                 )
             } else {
                 ScrollView {
-                    LazyVGrid(columns: columns, alignment: .leading, spacing: 22) {
+                    PosterGrid {
                         ForEach(items) { related in
                             ZStack(alignment: .topLeading) {
                                 NavigationLink {
                                     AnimeDetailView(anime: related, library: library)
                                 } label: {
-                                    PosterView(anime: related, width: 142, height: 204)
+                                    PosterView(anime: related)
                                 }
                                 .buttonStyle(.plain)
                                 watchLaterBookmark(for: related)
@@ -318,7 +316,7 @@ private struct RelatedAnimeView: View {
                             }
                         }
                     }
-                    .padding(20)
+                    .padding(18)
                 }
             }
         }

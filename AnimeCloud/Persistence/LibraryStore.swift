@@ -8,6 +8,7 @@ final class LibraryStore: ObservableObject {
     @Published private(set) var libraryCategories: [String: LibraryCategory] = [:]
     private(set) var seenEpisodeIDs: Set<String> = []
     @Published private(set) var recentAnime: [Anime] = []
+    @Published private(set) var recentlyPlayedAnime: [Anime] = []
 
     var onChange: (() -> Void)?
     let seenStatusChanged = PassthroughSubject<(episodeID: String, isSeen: Bool), Never>()
@@ -28,6 +29,7 @@ final class LibraryStore: ObservableObject {
         }
         seenEpisodeIDs = Set(decode([String].self, key: "library.seen") ?? [])
         recentAnime = decode([Anime].self, key: "library.recent") ?? []
+        recentlyPlayedAnime = decode([Anime].self, key: "library.recentlyPlayed") ?? []
         favoriteTombstones = Set(decode([String].self, key: "library.favoriteTombstones") ?? [])
         seenTombstones = Set(decode([String].self, key: "library.seenTombstones") ?? [])
         episodeWatchRecords = decode([String: EpisodeWatchRecord].self, key: "library.episodeWatchRecords") ?? [:]
@@ -39,14 +41,25 @@ final class LibraryStore: ObservableObject {
     func isSeen(_ episode: Episode) -> Bool { seenEpisodeIDs.contains(episode.id) }
 
     func recordPlayback(of episode: Episode, anime: Anime, episodes: [Episode], position: TimeInterval, duration: TimeInterval) {
-        guard position.isFinite, duration.isFinite, duration > 0, position / duration >= 0.5 else { return }
+        guard position.isFinite, duration.isFinite, duration > 0 else { return }
+        if position >= 3 { recordRecentlyPlayed(anime) }
+        guard position / duration >= 0.5 else { return }
         if position / duration >= 0.9 { markSeen(episode, anime: anime) }
         updatePlaybackCategory(for: anime, episodes: episodes)
     }
 
     func completePlayback(of episode: Episode, anime: Anime, episodes: [Episode]) {
+        recordRecentlyPlayed(anime)
         markSeen(episode, anime: anime)
         updatePlaybackCategory(for: anime, episodes: episodes)
+    }
+
+    private func recordRecentlyPlayed(_ anime: Anime) {
+        guard recentlyPlayedAnime.first?.id != anime.id else { return }
+        var items = recentlyPlayedAnime.filter { $0.id != anime.id }
+        items.insert(anime, at: 0)
+        recentlyPlayedAnime = Array(items.prefix(12))
+        defaults.set(try? encoder.encode(recentlyPlayedAnime), forKey: "library.recentlyPlayed")
     }
 
     private func updatePlaybackCategory(for anime: Anime, episodes: [Episode]) {

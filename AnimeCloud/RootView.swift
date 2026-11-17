@@ -8,7 +8,7 @@ struct RootView: View {
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             TabView(selection: $selectedTab) {
-                HomeView().tag(0).tabItem { Label("Home", systemImage: "sparkles.tv") }
+                HomeView(library: model.library).tag(0).tabItem { Label("Home", systemImage: "sparkles.tv") }
                 DiscoverView().tag(1).tabItem { Label("Discover", systemImage: "safari") }
                 ScheduleView().tag(2).tabItem { Label("Schedule", systemImage: "calendar") }
                 LibraryView(store: model.library, isActive: selectedTab == 3)
