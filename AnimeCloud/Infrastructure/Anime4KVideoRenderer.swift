@@ -783,6 +783,7 @@ struct PlaybackControls<NextEpisode: View>: View {
     let onInteraction: (Bool) -> Void
     let isFullscreen: Bool
     let toggleFullscreen: () -> Void
+    var onSwipeDown: (() -> Void)?
     @ViewBuilder let nextEpisode: () -> NextEpisode
     @State private var isPlaying = true
     @State private var currentTime = 0.0
@@ -798,13 +799,13 @@ struct PlaybackControls<NextEpisode: View>: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .overlay(alignment: .bottom) {
-            VStack(alignment: .trailing, spacing: 10) {
+        .overlay(alignment: .bottomTrailing) {
+            VStack(alignment: .trailing, spacing: 8) {
                 nextEpisode()
                 if areVisible { timeline }
             }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 16)
+            .padding(.horizontal, 12)
+            .padding(.bottom, 8)
         }
         .foregroundStyle(.white)
         .onAppear(perform: installTimeObserver)
@@ -822,7 +823,7 @@ struct PlaybackControls<NextEpisode: View>: View {
                 PlaybackFullscreenSwipe(isFullscreen: isFullscreen, onTap: {
                     togglePlayback()
                     onInteraction(false)
-                }, toggleFullscreen: toggleFullscreen)
+            }, onSwipeDown: onSwipeDown, toggleFullscreen: toggleFullscreen)
                 .accessibilityHidden(true)
             }
             transportButton("Go forward 15 seconds", icon: "goforward.15", size: 56) { skip(by: 15) }
