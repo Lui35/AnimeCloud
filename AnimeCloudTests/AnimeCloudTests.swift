@@ -121,6 +121,7 @@ final class AnimeCloudTests: XCTestCase {
         store.onChange = { changes += 1 }
         store.recordPlayback(of: episode, anime: anime, episodes: episodes, position: 49, duration: 100)
         XCTAssertNil(store.category(for: anime))
+        XCTAssertEqual(LibraryStore(defaults: defaults).recentlyPlayedAnime.map(\.id), [anime.id])
         store.recordPlayback(of: episode, anime: anime, episodes: episodes, position: 50, duration: 100)
         XCTAssertEqual(store.category(for: anime), .watchingNow)
         XCTAssertFalse(store.isSeen(episode))
@@ -128,6 +129,29 @@ final class AnimeCloudTests: XCTestCase {
         XCTAssertEqual(store.favorites.map(\.id), [anime.id])
         store.recordPlayback(of: episode, anime: anime, episodes: episodes, position: 60, duration: 100)
         XCTAssertEqual(changes, 1, "Periodic playback must not repeatedly reschedule cloud sync")
+    }
+
+    @MainActor
+    func testContinueWatchingResumesUnwatchedProgressOrPicksTheNextEpisode() {
+        let suite = "AnimeCloudTests.continueWatching.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let library = LibraryStore(defaults: defaults)
+        let progress = PlaybackProgressStore(defaults: defaults)
+        let episodes = (1...4).reversed().map { Episode(id: "episode-\($0)", name: "Episode \($0)") }
+        let (fourth, third, second, first) = (episodes[0], episodes[1], episodes[2], episodes[3])
+
+        XCTAssertEqual(progress.episodeToContinue(in: episodes, library: library), first)
+        library.markSeen(second)
+        progress.save(episodeID: second.id, position: 10, duration: 100)
+        XCTAssertEqual(progress.episodeToContinue(in: episodes, library: library), third)
+        progress.save(episodeID: fourth.id, position: 20, duration: 100)
+        XCTAssertEqual(progress.episodeToContinue(in: episodes, library: library), fourth)
+        library.markSeen(third)
+        library.markSeen(fourth)
+        XCTAssertEqual(progress.episodeToContinue(in: episodes, library: library), first)
+        library.markSeen(first)
+        XCTAssertNil(progress.episodeToContinue(in: episodes, library: library))
     }
 
     @MainActor

@@ -2,16 +2,29 @@ import ImageIO
 import SwiftUI
 import UIKit
 
+struct PosterGrid<Content: View>: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        LazyVGrid(
+            columns: [GridItem(dynamicTypeSize.isAccessibilitySize ? .flexible() : .adaptive(minimum: 142), spacing: 16)],
+            alignment: .leading,
+            spacing: 22,
+            content: content
+        )
+    }
+}
+
 struct PosterView: View {
     let anime: Anime
-    var width: CGFloat = 142
-    var height: CGFloat = 204
+    var width: CGFloat?
     var cachedArtworkURL: URL?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             RemoteArtwork(url: cachedArtworkURL ?? anime.imageURL)
-                .frame(width: width, height: height)
+                .aspectRatio(0.7, contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .overlay(alignment: .topTrailing) {
                     if let year = anime.year, !year.isEmpty {
@@ -23,17 +36,19 @@ struct PosterView: View {
                             .padding(8)
                     }
                 }
+                .accessibilityHidden(true)
             Text(anime.name)
                 .font(.subheadline.weight(.semibold))
-                .lineLimit(2)
-                .frame(width: width, alignment: .leading)
-            if !anime.subtitle.isEmpty {
-                Text(anime.subtitle)
-                    .font(.caption)
-                    .foregroundStyle(CloudTheme.muted)
-                    .lineLimit(1)
-            }
+                .lineLimit(2, reservesSpace: true)
+                .multilineTextAlignment(.leading)
+            Text(anime.subtitle.isEmpty ? " " : anime.subtitle)
+                .font(.caption)
+                .foregroundStyle(CloudTheme.muted)
+                .lineLimit(1)
+                .accessibilityHidden(anime.subtitle.isEmpty)
         }
+        .frame(width: width)
+        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
     }
 }

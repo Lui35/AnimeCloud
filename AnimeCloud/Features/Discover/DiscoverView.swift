@@ -5,8 +5,6 @@ struct DiscoverView: View {
     @State private var query = ""
     @State private var selectedStatus = "All"
 
-    private let columns = [GridItem(.adaptive(minimum: 145), spacing: 16)]
-
     var body: some View {
         NavigationStack {
             ZStack {
@@ -21,9 +19,9 @@ struct DiscoverView: View {
                                 .frame(height: 360)
                         } else {
                             Text("\(filtered.count) titles").font(.caption.weight(.semibold)).foregroundStyle(CloudTheme.muted)
-                            LazyVGrid(columns: columns, alignment: .leading, spacing: 22) {
+                            PosterGrid {
                                 ForEach(filtered) { anime in
-                                    NavigationLink(value: anime) { PosterView(anime: anime, width: 154, height: 220) }.buttonStyle(.plain)
+                                    NavigationLink(value: anime) { PosterView(anime: anime) }.buttonStyle(.plain)
                                 }
                             }
                         }

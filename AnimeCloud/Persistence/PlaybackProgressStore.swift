@@ -32,6 +32,15 @@ final class PlaybackProgressStore: ObservableObject {
         entries[episodeID]
     }
 
+    func episodeToContinue(in episodes: [Episode], library: LibraryStore) -> Episode? {
+        let resumed = episodes.compactMap { episode -> (Episode, Date)? in
+            guard !library.isSeen(episode), let progress = entries[episode.id] else { return nil }
+            return (episode, progress.updatedAt)
+        }.max { $0.1 < $1.1 }?.0
+        // Catalog order is newest first. Prefer the episode just after the latest watched one.
+        return resumed ?? episodes.prefix { !library.isSeen($0) }.last ?? episodes.last { !library.isSeen($0) }
+    }
+
     func save(episodeID: String, position: TimeInterval, duration: TimeInterval) {
         guard position.isFinite, duration.isFinite, position >= 3, duration > 0 else { return }
         if position / duration >= 0.95 {

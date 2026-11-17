@@ -237,7 +237,7 @@ struct DownloadsView: View {
                     VStack(alignment: .leading, spacing: 16) {
                         if model.hasPendingCloudChanges { DownloadSyncStatus() }
                         SectionHeading(title: "On this device")
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 154), spacing: 16)], alignment: .leading, spacing: 22) {
+                        PosterGrid {
                             ForEach(groups, id: \.anime.id) { group in
                                 let anime = group.anime
                                 let ready = group.records.filter { downloads.localURL(for: $0.id) != nil }.count
@@ -245,13 +245,13 @@ struct DownloadsView: View {
                                     DownloadedAnimeView(anime: anime, downloads: downloads, library: model.library, progress: model.playbackProgress)
                                 } label: {
                                     VStack(alignment: .leading, spacing: 7) {
-                                        PosterView(anime: anime, width: 154, height: 220,
-                                                   cachedArtworkURL: downloads.artworkURL(for: anime.id))
+                                        PosterView(anime: anime, cachedArtworkURL: downloads.artworkURL(for: anime.id))
                                         Text(ready == group.records.count
                                              ? (ready == 1 ? "1 episode" : "\(ready) episodes")
                                              : "\(ready) of \(group.records.count) ready")
                                             .font(.caption.weight(.semibold))
                                             .foregroundStyle(CloudTheme.cyan)
+                                            .lineLimit(1)
                                     }
                                     .accessibilityElement(children: .combine)
                                 }

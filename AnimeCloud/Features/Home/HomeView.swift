@@ -2,6 +2,10 @@ import SwiftUI
 
 struct HomeView: View {
     @EnvironmentObject private var model: AppModel
+    @ObservedObject var library: LibraryStore
+    @State private var recommendation: HomePlayback?
+    @State private var playing: HomePlayback?
+    @State private var recommendationRevision = 0
 
     var body: some View {
         NavigationStack {
@@ -10,19 +14,71 @@ struct HomeView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 28) {
                         header
-                        if model.isBootstrapping && model.featured.isEmpty { ProgressView().frame(maxWidth: .infinity).padding(.top, 120) }
-                        else if let hero = model.featured.first { HeroCard(anime: hero, library: model.library) }
+                        if let recommendation, !library.isSeen(recommendation.episode) {
+                            ContinueWatchingCard(playback: recommendation, library: library) { playing = recommendation }
+                        } else if model.isBootstrapping && model.featured.isEmpty {
+                            ProgressView().frame(maxWidth: .infinity).padding(.top, 120)
+                        }
+                        if !library.recentAnime.isEmpty { posterRail(title: "Continue exploring", items: library.recentAnime) }
+                        if !model.featured.isEmpty { posterRail(title: "Trending in the cloud", items: model.featured) }
                         if !model.newlyAddedEpisodes.isEmpty { newEpisodesRail }
-                        if !model.featured.isEmpty { posterRail(title: "Trending in the cloud", items: Array(model.featured.dropFirst())) }
-                        if !model.library.recentAnime.isEmpty { posterRail(title: "Continue exploring", items: model.library.recentAnime) }
                     }
                     .padding(.bottom, 110)
                 }
-                .refreshable { await model.refresh() }
+                .refreshable {
+                    await model.refresh()
+                    recommendationRevision += 1
+                }
             }
             .toolbar(.hidden, for: .navigationBar)
-            .navigationDestination(for: Anime.self) { anime in AnimeDetailView(anime: anime, library: model.library) }
+            .navigationDestination(for: Anime.self) { anime in AnimeDetailView(anime: anime, library: library) }
+            .task(id: RecommendationRequest(candidates: continuationCandidates, revision: recommendationRevision)) {
+                await loadRecommendation()
+            }
+            .onReceive(library.seenStatusChanged) { _ in
+                if playing == nil { recommendationRevision += 1 }
+            }
+            .sheet(item: $playing, onDismiss: { recommendationRevision += 1 }) { playback in
+                PlayerSheet(
+                    anime: playback.anime,
+                    initialEpisode: playback.episode,
+                    episodes: playback.episodes,
+                    library: library,
+                    progressStore: model.playbackProgress,
+                    downloadedPlayback: playback.isOffline
+                )
+            }
         }
+    }
+
+    private var continuationCandidates: [Anime] {
+        let saved = library.favorites.filter { library.category(for: $0) == .watchingNow }
+        let recentlyOpened = model.playbackProgress.entries.isEmpty ? [] : library.recentAnime
+        var included: Set<String> = []
+        return (library.recentlyPlayedAnime + saved + recentlyOpened).filter {
+            library.category(for: $0) != .watched && included.insert($0.id).inserted
+        }
+    }
+
+    private func loadRecommendation() async {
+        let playedIDs = Set(library.recentlyPlayedAnime.map(\.id))
+        for anime in continuationCandidates {
+            let detail = try? await model.api.animeDetail(id: anime.id)
+            guard !Task.isCancelled else { return }
+            let episodes = detail?.episodes ?? model.downloads.records.values
+                .filter { $0.anime.id == anime.id && model.downloads.localURL(for: $0.id) != nil }
+                .sorted { ($0.catalogPosition, $0.id) < ($1.catalogPosition, $1.id) }
+                .map(\.episode)
+
+            if detail != nil { model.applyAniListProgress(to: anime, episodes: episodes) }
+            let hasPlayback = playedIDs.contains(anime.id) || library.category(for: anime) == .watchingNow ||
+                episodes.contains { model.playbackProgress.progress(for: $0.id) != nil }
+            if hasPlayback, let episode = model.playbackProgress.episodeToContinue(in: episodes, library: library) {
+                recommendation = HomePlayback(anime: anime, episode: episode, episodes: episodes, isOffline: detail == nil)
+                return
+            }
+        }
+        recommendation = nil
     }
 
     private var header: some View {
@@ -49,7 +105,7 @@ struct HomeView: View {
             SectionHeading(title: title).padding(.horizontal, 20)
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: 14) {
-                    ForEach(items) { anime in NavigationLink(value: anime) { PosterView(anime: anime) }.buttonStyle(.plain) }
+                    ForEach(items) { anime in NavigationLink(value: anime) { PosterView(anime: anime, width: 142) }.buttonStyle(.plain) }
                 }
                 .padding(.horizontal, 20)
             }
@@ -82,6 +138,7 @@ private struct NewEpisodeCard: View {
             RemoteArtwork(url: anime.imageURL)
                 .frame(width: 158, height: 218)
                 .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
+                .accessibilityHidden(true)
                 .overlay(alignment: .bottomLeading) {
                     if let episode = anime.latestEpisodeName, !episode.isEmpty {
                         Text(episode)
@@ -98,29 +155,47 @@ private struct NewEpisodeCard: View {
                 }
             Text(anime.name)
                 .font(.subheadline.weight(.semibold))
-                .lineLimit(2)
+                .lineLimit(2, reservesSpace: true)
                 .frame(width: 158, alignment: .leading)
         }
+        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityHint("Opens the anime preview")
     }
 }
 
-private struct HeroCard: View {
+private struct RecommendationRequest: Equatable {
+    let candidates: [Anime]
+    let revision: Int
+}
+
+private struct HomePlayback: Identifiable {
     let anime: Anime
+    let episode: Episode
+    let episodes: [Episode]
+    let isOffline: Bool
+
+    var id: String { episode.id }
+}
+
+private struct ContinueWatchingCard: View {
+    let playback: HomePlayback
     @ObservedObject var library: LibraryStore
+    let play: () -> Void
+
+    private var anime: Anime { playback.anime }
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             RemoteArtwork(url: anime.imageURL).frame(height: 440)
             LinearGradient(colors: [.clear, CloudTheme.ink.opacity(0.28), CloudTheme.ink], startPoint: .top, endPoint: .bottom)
             VStack(alignment: .leading, spacing: 12) {
-                Text("FEATURED NOW").font(.caption.weight(.black)).tracking(1.8).foregroundStyle(CloudTheme.cyan)
+                Text("CONTINUE WATCHING").font(.caption.weight(.black)).tracking(1.8).foregroundStyle(CloudTheme.cyan)
                 Text(anime.name).font(.system(size: 34, weight: .black, design: .rounded)).lineLimit(3)
-                Text(anime.subtitle).font(.subheadline).foregroundStyle(.white.opacity(0.78))
+                Text(playback.episode.name).font(.subheadline).foregroundStyle(.white.opacity(0.78))
                 HStack {
-                    NavigationLink(value: anime) {
-                        Label("Explore", systemImage: "play.fill").font(.headline).padding(.horizontal, 18).padding(.vertical, 12).background(.white, in: Capsule()).foregroundStyle(CloudTheme.ink)
+                    Button(action: play) {
+                        Label("Play", systemImage: "play.fill").font(.headline).padding(.horizontal, 18).padding(.vertical, 12).background(.white, in: Capsule()).foregroundStyle(CloudTheme.ink)
                     }
                     .buttonStyle(.plain)
                     LibrarySaveMenu(anime: anime, store: library, size: 44)
