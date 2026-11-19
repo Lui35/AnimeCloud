@@ -56,6 +56,7 @@ struct PosterView: View {
 struct RemoteArtwork: View {
     let url: URL?
     var fallbackFileURL: URL?
+    var blurRadius: CGFloat = 0
     @Environment(\.displayScale) private var displayScale
     @State private var phase: ArtworkPhase = .empty
     @State private var reloadToken = 0
@@ -79,13 +80,11 @@ struct RemoteArtwork: View {
     @ViewBuilder private var artwork: some View {
         switch phase {
         case .success(let image):
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFill()
+            artworkImage(image)
                 .transition(.opacity)
         case .failure, .empty:
             if let path = fallbackFileURL?.path, let image = UIImage(contentsOfFile: path) {
-                Image(uiImage: image).resizable().scaledToFill()
+                artworkImage(image)
             } else {
                 placeholder.overlay(alignment: .bottom) {
                     if phase.isFailure {
@@ -100,6 +99,13 @@ struct RemoteArtwork: View {
                 }
             }
         }
+    }
+
+    private func artworkImage(_ image: UIImage) -> some View {
+        Image(uiImage: image)
+            .resizable()
+            .scaledToFill()
+            .blur(radius: blurRadius, opaque: blurRadius > 0)
     }
 
     private func requestID(for size: CGSize) -> ArtworkRequestID {

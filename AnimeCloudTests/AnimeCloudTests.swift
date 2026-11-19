@@ -1,7 +1,38 @@
 import XCTest
+import UIKit
 @testable import AnimeCloud
 
 final class AnimeCloudTests: XCTestCase {
+    @MainActor
+    func testPlaybackKeepsDisplayAwakeAndRestoresIdleTimer() {
+        let application = UIApplication.shared
+        let original = application.isIdleTimerDisabled
+        defer { application.isIdleTimerDisabled = original }
+        let controller = PlaybackDisplaySleepController()
+
+        application.isIdleTimerDisabled = false
+        controller.update(isPlaybackActive: true, isAppActive: true)
+        controller.update(isPlaybackActive: true, isAppActive: true)
+        XCTAssertTrue(application.isIdleTimerDisabled)
+
+        controller.update(isPlaybackActive: false, isAppActive: true)
+        XCTAssertFalse(application.isIdleTimerDisabled, "Pausing or ending playback restores auto-lock")
+
+        controller.update(isPlaybackActive: true, isAppActive: true)
+        controller.update(isPlaybackActive: true, isAppActive: false)
+        XCTAssertFalse(application.isIdleTimerDisabled, "Background playback allows display sleep")
+
+        controller.update(isPlaybackActive: true, isAppActive: true)
+        XCTAssertTrue(application.isIdleTimerDisabled, "Returning to active playback keeps the display awake")
+        controller.update(isPlaybackActive: false, isAppActive: false)
+        XCTAssertFalse(application.isIdleTimerDisabled)
+
+        application.isIdleTimerDisabled = true
+        controller.update(isPlaybackActive: true, isAppActive: true)
+        controller.update(isPlaybackActive: false, isAppActive: false)
+        XCTAssertTrue(application.isIdleTimerDisabled, "Preserve an existing keep-awake request")
+    }
+
     @MainActor
     func testLeavingDiscoverKeepsOneSharedCatalogRequest() async {
         let configuration = URLSessionConfiguration.ephemeral

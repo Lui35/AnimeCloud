@@ -18,18 +18,22 @@ struct ScheduleView: View {
                                 .frame(height: 420)
                         } else {
                             ForEach(displayed) { anime in
-                                NavigationLink(value: anime) {
-                                    HStack(spacing: 14) {
-                                        RemoteArtwork(url: anime.imageURL).frame(width: 90, height: 122).clipShape(RoundedRectangle(cornerRadius: 16))
-                                        VStack(alignment: .leading, spacing: 8) {
-                                            Text(anime.name).font(.headline).multilineTextAlignment(.leading)
-                                            Text(anime.subtitle).font(.caption).foregroundStyle(CloudTheme.muted)
-                                            Label(dayNames[anime.day ?? ""] ?? "Scheduled", systemImage: "clock")
-                                                .font(.caption.weight(.semibold)).foregroundStyle(CloudTheme.cyan)
-                                        }
-                                        Spacer(); Image(systemName: "chevron.right").foregroundStyle(CloudTheme.muted)
-                                    }.padding(11).cloudPanel()
-                                }.buttonStyle(.plain)
+                                HStack(spacing: 8) {
+                                    NavigationLink(value: anime) {
+                                        HStack(spacing: 14) {
+                                            RemoteArtwork(url: anime.imageURL).frame(width: 90, height: 122).clipShape(RoundedRectangle(cornerRadius: 16))
+                                            VStack(alignment: .leading, spacing: 8) {
+                                                Text(anime.name).font(.headline).multilineTextAlignment(.leading)
+                                                Text(anime.subtitle).font(.caption).foregroundStyle(CloudTheme.muted)
+                                                Label(dayNames[anime.day ?? ""] ?? "Scheduled", systemImage: "clock")
+                                                    .font(.caption.weight(.semibold)).foregroundStyle(CloudTheme.cyan)
+                                            }
+                                            Spacer(minLength: 0)
+                                        }.contentShape(Rectangle())
+                                    }.buttonStyle(.plain)
+                                    LibraryQuickAddMenu(anime: anime, store: model.library)
+                                }
+                                .padding(11).cloudPanel()
                             }
                         }
                     }.padding(18).padding(.bottom, 100)
