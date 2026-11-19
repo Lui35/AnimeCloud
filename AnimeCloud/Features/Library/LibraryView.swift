@@ -39,6 +39,7 @@ struct LibraryView: View {
                                 ForEach(items) { anime in
                                     NavigationLink(value: anime) { PosterView(anime: anime) }
                                         .buttonStyle(.plain)
+                                        .libraryQuickAdd(anime: anime, store: store)
                                 }
                             }.padding(18).padding(.bottom, 100)
                         }

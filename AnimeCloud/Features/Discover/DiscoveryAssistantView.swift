@@ -70,17 +70,21 @@ struct DiscoveryAssistantView: View {
             Text(answer.explanation).font(.subheadline).foregroundStyle(CloudTheme.muted)
             Text(answer.source.uppercased()).font(.caption2.weight(.black)).tracking(1.2).foregroundStyle(CloudTheme.cyan)
             ForEach(answer.anime) { anime in
-                NavigationLink(value: anime) {
-                    HStack(spacing: 13) {
-                        RemoteArtwork(url: anime.imageURL).frame(width: 62, height: 86).clipShape(RoundedRectangle(cornerRadius: 12))
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text(anime.name).font(.headline).multilineTextAlignment(.leading)
-                            Text(anime.subtitle).font(.caption).foregroundStyle(CloudTheme.muted)
+                HStack(spacing: 8) {
+                    NavigationLink(value: anime) {
+                        HStack(spacing: 13) {
+                            RemoteArtwork(url: anime.imageURL).frame(width: 62, height: 86).clipShape(RoundedRectangle(cornerRadius: 12))
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(anime.name).font(.headline).multilineTextAlignment(.leading)
+                                Text(anime.subtitle).font(.caption).foregroundStyle(CloudTheme.muted)
+                            }
+                            Spacer(minLength: 0)
                         }
-                        Spacer(); Image(systemName: "chevron.right").foregroundStyle(CloudTheme.muted)
-                    }
-                    .padding(10).cloudPanel()
-                }.buttonStyle(.plain)
+                        .contentShape(Rectangle())
+                    }.buttonStyle(.plain)
+                    LibraryQuickAddMenu(anime: anime, store: model.library)
+                }
+                .padding(11).cloudPanel()
             }
         }
     }

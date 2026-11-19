@@ -1,5 +1,6 @@
 import AVKit
 import AVFAudio
+import MediaPlayer
 import SwiftUI
 
 struct AnimeDetailView: View {
@@ -304,16 +305,13 @@ private struct RelatedAnimeView: View {
                 ScrollView {
                     PosterGrid {
                         ForEach(items) { related in
-                            ZStack(alignment: .topLeading) {
-                                NavigationLink {
-                                    AnimeDetailView(anime: related, library: library)
-                                } label: {
-                                    PosterView(anime: related)
-                                }
-                                .buttonStyle(.plain)
-                                watchLaterBookmark(for: related)
-                                    .padding(4)
+                            NavigationLink {
+                                AnimeDetailView(anime: related, library: library)
+                            } label: {
+                                PosterView(anime: related)
                             }
+                            .buttonStyle(.plain)
+                            .libraryQuickAdd(anime: related, store: library)
                         }
                     }
                     .padding(18)
@@ -323,44 +321,6 @@ private struct RelatedAnimeView: View {
         .navigationTitle("Related to \(anime.name)")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: reloadToken) { await load() }
-    }
-
-    @ViewBuilder
-    private func watchLaterBookmark(for related: Anime) -> some View {
-        let category = library.category(for: related)
-        let isBookmarked = category == .watchLater
-        let badge = posterBadge(isBookmarked ? "bookmark.fill" : category?.icon ?? "plus")
-            .foregroundStyle(category == nil ? .white : CloudTheme.cyan)
-
-        Group {
-            if let category, category != .watchLater {
-                Menu {
-                    LibraryCategoryActions(anime: related, store: library)
-                } label: {
-                    badge
-                }
-                .accessibilityLabel("Saved in \(category.title): \(related.name)")
-            } else {
-                Menu {
-                    LibraryCategoryActions(anime: related, store: library)
-                } label: {
-                    badge
-                } primaryAction: {
-                    library.setCategory(isBookmarked ? nil : .watchLater, for: related)
-                }
-                .accessibilityLabel(isBookmarked ? "Remove \(related.name) from Watch Later" : "Add \(related.name) to Watch Later")
-            }
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func posterBadge(_ icon: String) -> some View {
-        Image(systemName: icon)
-            .font(.subheadline.weight(.semibold))
-            .frame(width: 32, height: 32)
-            .background(.black.opacity(0.72), in: Circle())
-            .frame(width: 44, height: 44)
-            .contentShape(Rectangle())
     }
 
     private func load() async {
@@ -417,6 +377,7 @@ struct AnimeDetailHero<Actions: View>: View {
 
 struct EpisodeRow: View {
     @EnvironmentObject private var model: AppModel
+    @AppStorage("playback.blurUnwatchedThumbnails") private var blurUnwatchedThumbnails = false
     let anime: Anime
     let episode: Episode
     let library: LibraryStore
@@ -527,26 +488,30 @@ struct EpisodeRow: View {
     }
 
     private var thumbnail: some View {
-        RemoteArtwork(url: episode.imageURL, fallbackFileURL: download.flatMap { model.downloads.artworkURL(for: $0.anime.id) })
-            .frame(width: 120, height: 72)
-            .overlay(alignment: .topLeading) {
-                if episode.isFiller {
-                    EpisodeTypeBadge(episode: episode).padding(6)
-                }
+        RemoteArtwork(
+            url: episode.imageURL,
+            fallbackFileURL: download.flatMap { model.downloads.artworkURL(for: $0.anime.id) },
+            blurRadius: blurUnwatchedThumbnails && !displayedIsSeen ? 16 : 0
+        )
+        .frame(width: 120, height: 72)
+        .overlay(alignment: .topLeading) {
+            if episode.isFiller {
+                EpisodeTypeBadge(episode: episode).padding(6)
             }
-            .overlay(alignment: .bottomLeading) {
-                if displayedIsSeen {
-                    Label("Watched", systemImage: "checkmark.circle.fill")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(CloudTheme.ink)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .background(CloudTheme.cyan, in: Capsule())
-                        .padding(6)
-                }
+        }
+        .overlay(alignment: .bottomLeading) {
+            if displayedIsSeen {
+                Label("Watched", systemImage: "checkmark.circle.fill")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(CloudTheme.ink)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(CloudTheme.cyan, in: Capsule())
+                    .padding(6)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 13))
-            .accessibilityHidden(true)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 13))
+        .accessibilityHidden(true)
     }
 
     @ViewBuilder private var episodeStatus: some View {
@@ -604,11 +569,12 @@ struct PlayerSheet: View {
     @State private var timeObserver: Any?
     @State private var itemFailureObserver: NSObjectProtocol?
     @State private var endObserver: NSObjectProtocol?
+    @State private var playbackStatusObserver: NSKeyValueObservation?
+    @StateObject private var displaySleep = PlaybackDisplaySleepController()
     @State private var retryToken = UUID()
     @State private var showingUpNext = false
     @State private var isPlayerVisible = true
     @State private var isFullscreen = false
-    @State private var playbackVolume: Float = 1
     @StateObject private var anime4KBenchmark = Anime4KBenchmarkController()
     @StateObject private var pictureInPicture = PlaybackPictureInPicture()
     @AppStorage("playback.anime4k.mode") private var anime4KModeRawValue = Anime4KPlaybackMode.off.rawValue
@@ -714,7 +680,10 @@ struct PlayerSheet: View {
                 }
             }
             .interactiveDismissDisabled()
-            .onAppear { isPlayerVisible = true }
+            .onAppear {
+                isPlayerVisible = true
+                updateDisplaySleep()
+            }
         }
         .overlay {
             if !isFullscreen {
@@ -727,6 +696,18 @@ struct PlayerSheet: View {
         .task(id: retryToken) {
             guard player == nil else { return }
             await preparePlayback(requestID: retryToken)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
+            displaySleep.update(isPlaybackActive: false, isAppActive: false)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            updateDisplaySleep()
+        }
+        .onDisappear {
+            if !isFullscreen {
+                isPlayerVisible = false
+                displaySleep.update(isPlaybackActive: false, isAppActive: false)
+            }
         }
         .fullScreenCover(isPresented: $isFullscreen) {
             FullscreenPlaybackView(
@@ -797,8 +778,13 @@ struct PlayerSheet: View {
             let item = AVPlayerItem(asset: asset)
             let newPlayer = AVPlayer(playerItem: item)
             newPlayer.automaticallyWaitsToMinimizeStalling = true
-            newPlayer.volume = playbackVolume
             player = newPlayer
+            playbackStatusObserver = newPlayer.observe(\.timeControlStatus, options: [.initial, .new]) { observedPlayer, _ in
+                Task { @MainActor in
+                    guard self.player === observedPlayer else { return }
+                    updateDisplaySleep()
+                }
+            }
             installFailureObserver(for: item)
             installEndObserver(for: item)
             installProgressObserver(on: newPlayer)
@@ -945,8 +931,9 @@ struct PlayerSheet: View {
     }
 
     private func tearDownPlayer(deactivateAudio: Bool = true) {
+        playbackStatusObserver = nil
+        displaySleep.update(isPlaybackActive: false, isAppActive: false)
         if let player {
-            playbackVolume = player.volume
             let duration = player.currentItem?.duration.seconds ?? 0
             let position = player.currentTime().seconds
             if !showingUpNext {
@@ -968,12 +955,36 @@ struct PlayerSheet: View {
         }
     }
 
+    private func updateDisplaySleep() {
+        displaySleep.update(
+            isPlaybackActive: isPlayerVisible && player != nil && player?.timeControlStatus != .paused,
+            isAppActive: UIApplication.shared.applicationState == .active
+        )
+    }
+
     private func playbackMessage(for error: Error) -> String {
         let nsError = error as NSError
         if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorAppTransportSecurityRequiresSecureConnection {
             return "This older episode uses an insecure media URL that iOS blocked. Try again after updating the app."
         }
         return (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+    }
+}
+
+@MainActor
+final class PlaybackDisplaySleepController: ObservableObject {
+    private var previousIdleTimerDisabled: Bool?
+
+    func update(isPlaybackActive: Bool, isAppActive: Bool) {
+        if isPlaybackActive && isAppActive {
+            if previousIdleTimerDisabled == nil {
+                previousIdleTimerDisabled = UIApplication.shared.isIdleTimerDisabled
+            }
+            UIApplication.shared.isIdleTimerDisabled = true
+        } else if let previousIdleTimerDisabled {
+            UIApplication.shared.isIdleTimerDisabled = previousIdleTimerDisabled
+            self.previousIdleTimerDisabled = nil
+        }
     }
 }
 
@@ -998,6 +1009,7 @@ private struct FullscreenPlaybackView: View {
     @State private var level: Double?
     @State private var levelControl: PlayerGestureZone = .volume
     @State private var levelHideTask: Task<Void, Never>?
+    @State private var systemVolumeView = MPVolumeView(frame: CGRect(x: 0, y: 0, width: 120, height: 44))
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -1065,6 +1077,14 @@ private struct FullscreenPlaybackView: View {
                 controller: benchmark,
                 applyMode: selectMode
             )
+        }
+        .background {
+            // Keep the system volume slider attached while gestures drive it.
+            PlayerSystemVolumeControl(volumeView: systemVolumeView)
+                .frame(width: 120, height: 44)
+                .opacity(0.01)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
         }
         .overlay(alignment: .top) {
             if let player, controlsAreVisible, !benchmark.isRunning, benchmark.report == nil {
@@ -1160,21 +1180,24 @@ private struct FullscreenPlaybackView: View {
     private func playbackGesture(size: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 16)
             .onChanged { value in
-                guard PlayerGestureZone.allowsLevelAdjustment(in: size), let player else { return }
+                guard PlayerGestureZone.allowsLevelAdjustment(in: size), player != nil else { return }
                 let zone = PlayerGestureZone.at(value.startLocation.x, width: size.width)
                 guard zone != .center,
                       startingLevel != nil || PlayerFullscreenGesture.isVertical(value.translation)
                 else { return }
                 let screen = PlaybackOrientation.activeScene?.screen
                 if zone == .brightness && screen == nil { return }
-                let currentLevel = zone == .brightness ? Double(screen?.brightness ?? 0) : Double(player.volume)
+                let volumeSlider = systemVolumeView.subviews.compactMap { $0 as? UISlider }.first
+                if zone == .volume && volumeSlider?.isEnabled != true { return }
+                let currentLevel = zone == .brightness ? Double(screen?.brightness ?? 0) : Double(AVAudioSession.sharedInstance().outputVolume)
                 let initialLevel = startingLevel ?? currentLevel
                 startingLevel = initialLevel
                 let adjusted = min(max(initialLevel - Double(value.translation.height / max(1, size.height * 0.75)), 0), 1)
                 if zone == .brightness {
                     screen?.brightness = CGFloat(adjusted)
                 } else {
-                    player.volume = Float(adjusted)
+                    volumeSlider?.setValue(Float(adjusted), animated: false)
+                    volumeSlider?.sendActions(for: .valueChanged)
                 }
                 levelHideTask?.cancel()
                 levelControl = zone
@@ -1210,9 +1233,19 @@ private struct FullscreenPlaybackView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: isBrightness ? .trailing : .leading)
         .allowsHitTesting(false)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(isBrightness ? "Brightness" : "Playback volume")
+        .accessibilityLabel(isBrightness ? "Brightness" : "System volume")
         .accessibilityValue(Text(level, format: .percent.precision(.fractionLength(0))))
     }
+}
+
+private struct PlayerSystemVolumeControl: UIViewRepresentable {
+    let volumeView: MPVolumeView
+
+    func makeUIView(context: Context) -> MPVolumeView {
+        volumeView
+    }
+
+    func updateUIView(_ uiView: MPVolumeView, context: Context) {}
 }
 
 private struct NextEpisodeButton: View {

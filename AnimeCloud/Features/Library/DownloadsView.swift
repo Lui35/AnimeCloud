@@ -256,6 +256,7 @@ struct DownloadsView: View {
                                     .accessibilityElement(children: .combine)
                                 }
                                 .buttonStyle(.plain)
+                                .libraryQuickAdd(anime: anime, store: model.library)
                             }
                         }
                     }

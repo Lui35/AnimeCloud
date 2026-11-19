@@ -21,7 +21,9 @@ struct DiscoverView: View {
                             Text("\(filtered.count) titles").font(.caption.weight(.semibold)).foregroundStyle(CloudTheme.muted)
                             PosterGrid {
                                 ForEach(filtered) { anime in
-                                    NavigationLink(value: anime) { PosterView(anime: anime) }.buttonStyle(.plain)
+                                    NavigationLink(value: anime) { PosterView(anime: anime) }
+                                        .buttonStyle(.plain)
+                                        .libraryQuickAdd(anime: anime, store: model.library)
                                 }
                             }
                         }

@@ -105,7 +105,11 @@ struct HomeView: View {
             SectionHeading(title: title).padding(.horizontal, 20)
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: 14) {
-                    ForEach(items) { anime in NavigationLink(value: anime) { PosterView(anime: anime, width: 142) }.buttonStyle(.plain) }
+                    ForEach(items) { anime in
+                        NavigationLink(value: anime) { PosterView(anime: anime, width: 142) }
+                            .buttonStyle(.plain)
+                            .libraryQuickAdd(anime: anime, store: library)
+                    }
                 }
                 .padding(.horizontal, 20)
             }
@@ -121,6 +125,7 @@ struct HomeView: View {
                     ForEach(model.newlyAddedEpisodes) { anime in
                         NavigationLink(value: anime) { NewEpisodeCard(anime: anime) }
                             .buttonStyle(.plain)
+                            .libraryQuickAdd(anime: anime, store: library)
                     }
                 }
                 .padding(.horizontal, 20)

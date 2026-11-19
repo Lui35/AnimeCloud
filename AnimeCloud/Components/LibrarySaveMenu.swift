@@ -40,3 +40,52 @@ struct LibraryCategoryActions: View {
         }
     }
 }
+
+struct LibraryQuickAddMenu: View {
+    let anime: Anime
+    @ObservedObject var store: LibraryStore
+
+    var body: some View {
+        let category = store.category(for: anime)
+        Group {
+            if let category {
+                Menu {
+                    LibraryCategoryActions(anime: anime, store: store)
+                } label: {
+                    badge(category == .watchLater ? "bookmark.fill" : category.icon, isSaved: true)
+                }
+                .accessibilityLabel("Saved in \(category.title): \(anime.name)")
+            } else {
+                Menu {
+                    LibraryCategoryActions(anime: anime, store: store)
+                } label: {
+                    badge("plus", isSaved: false)
+                } primaryAction: {
+                    store.setCategory(.watchLater, for: anime)
+                }
+                .accessibilityLabel("Add \(anime.name) to Watch Later")
+                .accessibilityHint("Touch and hold to choose a library category")
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func badge(_ icon: String, isSaved: Bool) -> some View {
+        Image(systemName: icon)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(isSaved ? CloudTheme.cyan : .white)
+            .frame(width: 32, height: 32)
+            .background(.black.opacity(0.72), in: Circle())
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
+    }
+}
+
+extension View {
+    func libraryQuickAdd(anime: Anime, store: LibraryStore) -> some View {
+        overlay(alignment: .topLeading) {
+            LibraryQuickAddMenu(anime: anime, store: store)
+                .padding(4)
+        }
+    }
+}

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ProfileView: View {
     @EnvironmentObject private var model: AppModel
+    @AppStorage("playback.blurUnwatchedThumbnails") private var blurUnwatchedThumbnails = false
     @State private var showingLogin = false
     @State private var showingRecovery = false
     @State private var showingAniList = false
@@ -76,6 +77,16 @@ struct ProfileView: View {
             AniListSettingsRow(sync: model.aniList) { showingAniList = true }
             Divider().overlay(Color.white.opacity(0.08))
             ClearAllResumePositionsRow(progress: model.playbackProgress)
+            Divider().overlay(Color.white.opacity(0.08))
+            Toggle(isOn: $blurUnwatchedThumbnails) {
+                HStack(spacing: 14) {
+                    Image(systemName: "eye.slash").frame(width: 24).accessibilityHidden(true)
+                    Text("Blurred if not watched")
+                }
+            }
+            .toggleStyle(.switch)
+            .tint(CloudTheme.cyan)
+            .padding(16)
             Divider().overlay(Color.white.opacity(0.08))
             setting("Recover password", icon: "key") { showingRecovery = true }
             Divider().overlay(Color.white.opacity(0.08))
