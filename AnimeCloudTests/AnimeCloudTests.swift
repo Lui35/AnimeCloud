@@ -487,6 +487,81 @@ final class AnimeCloudTests: XCTestCase {
     }
 
     @MainActor
+    func testExportOrganizesEpisodesAndPreservesOriginals() async throws {
+        let suite = "AnimeCloudTests.export.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        let directory = URL.temporaryDirectory.appending(path: suite)
+        let output = directory.appending(path: "export")
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let anime = Anime(id: "anime", name: "Series/Name")
+        let records = [
+            EpisodeDownload(anime: anime, episode: Episode(id: "1", name: "Episode 1"), catalogPosition: 0,
+                            finalCanonEpisode: nil, status: .ready, relativePath: "1.mp4"),
+            EpisodeDownload(anime: anime, episode: Episode(id: "2", name: "Episode 1"), catalogPosition: 1,
+                            finalCanonEpisode: nil, status: .ready, relativePath: "2.mp4"),
+            EpisodeDownload(anime: Anime(id: "other", name: "Series/Name"), episode: Episode(id: "3", name: "Episode 2"),
+                            catalogPosition: 0, finalCanonEpisode: nil, status: .ready, relativePath: "3.mov")
+        ]
+        for record in records {
+            try Data(record.id.utf8).write(to: directory.appending(path: record.relativePath!))
+        }
+        defaults.set(try JSONEncoder().encode(Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0) })),
+                     forKey: "downloads.episodes")
+        let downloads = EpisodeDownloads(api: .live, defaults: defaults, directory: directory)
+        let folder = try await downloads.exportVideos(records.map(\.id), to: output)
+        for (path, expected) in [
+            ("Series-Name/Series-Name - Episode 1.mp4", "1"),
+            ("Series-Name/Series-Name - Episode 1 (2).mp4", "2"),
+            ("Series-Name (2)/Series-Name - Episode 2.mov", "3")
+        ] {
+            XCTAssertEqual(try Data(contentsOf: folder.appending(path: path)), Data(expected.utf8))
+        }
+        for record in records {
+            XCTAssertNotNil(downloads.localURL(for: record.id))
+        }
+        XCTAssertEqual(downloads.records.count, 3)
+        try downloads.remove("1")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: folder.appending(path: "Series-Name/Series-Name - Episode 1.mp4").path))
+    }
+
+    @MainActor
+    func testExportRejectsMissingDownloadsAndCleansFailedBatch() async throws {
+        let suite = "AnimeCloudTests.exportFailure.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        let directory = URL.temporaryDirectory.appending(path: suite)
+        let output = directory.appending(path: "export")
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let record = EpisodeDownload(anime: Anime(id: "anime", name: "Series"),
+                                     episode: Episode(id: "hls", name: "Episode 1"), catalogPosition: 0,
+                                     finalCanonEpisode: nil, status: .ready, relativePath: suite + ".movpkg", isHLS: true)
+        // An invalid local package exercises the conversion failure without a network dependency.
+        let package = URL.homeDirectory.appending(path: suite + ".movpkg")
+        try Data([0]).write(to: package)
+        defer { try? FileManager.default.removeItem(at: package) }
+        defaults.set(try JSONEncoder().encode([record.id: record]), forKey: "downloads.episodes")
+        let downloads = EpisodeDownloads(api: .live, defaults: defaults, directory: directory)
+        do {
+            _ = try await downloads.exportVideos(["missing"], to: output)
+            XCTFail("Missing episodes must not be exported")
+        } catch { XCTAssertTrue(error is DownloadError) }
+        do {
+            _ = try await downloads.exportVideos([record.id], to: output)
+            XCTFail("An unsupported package must not be exported as a video")
+        } catch {
+            XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
+            XCTAssertNotNil(downloads.localURL(for: record.id))
+        }
+    }
+
+    @MainActor
     func testRemovingRestoredDownloadKeepsResumeAndWatchedState() throws {
         let suite = "AnimeCloudTests.downloads.\(UUID())"
         let defaults = UserDefaults(suiteName: suite)!

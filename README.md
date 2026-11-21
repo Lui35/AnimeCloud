@@ -77,6 +77,14 @@ Scripts/build-unsigned-ipa.sh
 
 The resulting file is written to `Build/Unsigned/AnimeCloud-unsigned.ipa`.
 
+## Export downloaded episodes
+
+Open **Downloads → Export all** to save every completed download, or open an anime and choose **Export all** for that series. An episode’s options menu also has **Export video**. Choose a destination in the Files picker.
+
+Exports contain an **Anime Cloud** folder with one folder per anime and video filenames such as `Series - Episode 1.mp4`. Duplicate names receive a number instead of overwriting another episode. The exported copies remain available after removing downloads from the app, and can be opened from Files in compatible players such as VLC.
+
+Streaming downloads are converted to MP4 when iOS supports it. If conversion fails, the export reports an error and keeps the original downloads intact. Only completed downloads are included; exports need additional free space for the copies.
+
 ## Anime4K playback
 
 AnimeCloud can upscale video in real time with Anime4K shaders running on the device's Metal GPU. Open the sparkle menu in the top-right controls to choose **Off**, any **Fast** preset, or any **High Quality** preset. The available presets are A, B, C, A+A, B+B, and C+A in both quality tiers. Selecting **Off** plays the original video with the same controls.
