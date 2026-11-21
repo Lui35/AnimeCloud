@@ -29,6 +29,9 @@ jobs:
       - name: Show build environment
         run: xcodebuild -version
 
+      - name: Test LiveContainer source generation
+        run: python3 Scripts/test-generate-source.py
+
       - name: Build and run unit tests
         run: |
           simulator_id="$(xcrun simctl list devices available -j | jq -r '[.devices[] | .[] | select(.name | startswith("iPhone"))][0].udid // empty')"
