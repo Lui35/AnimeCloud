@@ -383,6 +383,7 @@ struct EpisodeRow: View {
     let library: LibraryStore
     @ObservedObject var progressStore: PlaybackProgressStore
     let download: EpisodeDownload?
+    let onExport: (() -> Void)?
     let onRemove: (() -> Void)?
     let onOpen: () -> Void
     @State private var displayedIsSeen: Bool
@@ -394,6 +395,7 @@ struct EpisodeRow: View {
         library: LibraryStore,
         progressStore: PlaybackProgressStore,
         download: EpisodeDownload? = nil,
+        onExport: (() -> Void)? = nil,
         onRemove: (() -> Void)? = nil,
         onOpen: @escaping () -> Void
     ) {
@@ -402,6 +404,7 @@ struct EpisodeRow: View {
         self.library = library
         self.progressStore = progressStore
         self.download = download
+        self.onExport = onExport
         self.onRemove = onRemove
         self.onOpen = onOpen
         _displayedIsSeen = State(initialValue: library.isSeen(episode))
@@ -470,6 +473,9 @@ struct EpisodeRow: View {
                 }
                 if canRetry {
                     Button("Retry download", systemImage: "arrow.clockwise") { model.downloads.retry(episode.id) }
+                }
+                if canPlay, let onExport {
+                    Button("Export video", systemImage: "square.and.arrow.up", action: onExport)
                 }
                 if let onRemove {
                     Button(role: .destructive, action: onRemove) {

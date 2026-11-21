@@ -140,6 +140,77 @@ final class EpisodeDownloads: NSObject, ObservableObject {
         return url
     }
 
+    func exportVideos(_ episodeIDs: [String], to directory: URL) async throws -> URL {
+        let sources = try episodeIDs.map { id -> (EpisodeDownload, URL) in
+            guard let record = records[id], let url = localURL(for: id) else { throw DownloadError.missing }
+            return (record, url)
+        }
+        return try await Self.writeExport(sources, to: directory)
+    }
+
+    nonisolated private static func exportName(_ name: String) -> String {
+        let cleaned = name.components(separatedBy: CharacterSet(charactersIn: "/:\\")
+            .union(.controlCharacters)).joined(separator: "-")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty || cleaned == "." || cleaned == ".." ? "Untitled" : String(cleaned.prefix(100))
+    }
+
+    nonisolated private static func writeExport(_ sources: [(EpisodeDownload, URL)], to directory: URL) async throws -> URL {
+        let manager = FileManager.default
+        let root = directory.appending(path: "Anime Cloud", directoryHint: .isDirectory)
+        do {
+            guard !sources.isEmpty else { throw DownloadError.missing }
+            var folders: [String: URL] = [:]
+            for (record, source) in sources {
+                try Task.checkCancellation()
+                let folder: URL
+                if let existing = folders[record.anime.id] {
+                    folder = existing
+                } else {
+                    folder = uniqueExportURL(in: root, name: exportName(record.anime.name), extension: "")
+                    try manager.createDirectory(at: folder, withIntermediateDirectories: true)
+                    folders[record.anime.id] = folder
+                }
+                let name = exportName(record.anime.name + " - " + record.episode.name)
+                if record.isHLS {
+                    let asset = AVURLAsset(url: source)
+                    guard let session = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetPassthrough),
+                          session.supportedFileTypes.contains(.mp4) else { throw DownloadError.exportUnsupported }
+                    session.outputURL = uniqueExportURL(in: folder, name: name, extension: "mp4")
+                    session.outputFileType = .mp4
+                    // AVFoundation permits cancelling an export from another thread.
+                    nonisolated(unsafe) let cancellableSession = session
+                    await withTaskCancellationHandler {
+                        await session.export()
+                    } onCancel: {
+                        cancellableSession.cancelExport()
+                    }
+                    try Task.checkCancellation()
+                    guard session.status == .completed else { throw session.error ?? DownloadError.exportUnsupported }
+                } else {
+                    let target = uniqueExportURL(in: folder, name: name, extension: source.pathExtension)
+                    try manager.copyItem(at: source, to: target)
+                }
+            }
+            try Task.checkCancellation()
+            return root
+        } catch {
+            try? manager.removeItem(at: directory)
+            throw error
+        }
+    }
+
+    nonisolated private static func uniqueExportURL(in directory: URL, name: String, extension ext: String) -> URL {
+        var number = 1
+        var candidate: URL
+        repeat {
+            let suffix = number == 1 ? "" : " (\(number))"
+            candidate = directory.appending(path: name + suffix + (ext.isEmpty ? "" : "." + ext))
+            number += 1
+        } while FileManager.default.fileExists(atPath: candidate.path)
+        return candidate
+    }
+
     func artworkURL(for animeID: String) -> URL? {
         availableArtwork.contains(animeID) ? artworkFile(for: animeID) : nil
     }
@@ -390,13 +461,14 @@ extension EpisodeDownloads: URLSessionDownloadDelegate, AVAssetDownloadDelegate 
 }
 
 enum DownloadError: LocalizedError {
-    case interrupted, missing, unsupported
+    case interrupted, missing, unsupported, exportUnsupported
 
     var errorDescription: String? {
         switch self {
         case .interrupted: "The download was interrupted. Try again when you’re connected."
         case .missing: "This video is missing from the device. Download it again."
         case .unsupported: "This source couldn’t be saved for offline playback."
+        case .exportUnsupported: "This streaming download can’t be converted to a video file by iOS. Your download is still available to watch in Anime Cloud."
         }
     }
 }

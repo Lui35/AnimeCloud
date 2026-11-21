@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct DownloadSelectionView: View {
     private enum RangeField { case from, to }
@@ -220,6 +221,8 @@ struct DownloadsView: View {
     @EnvironmentObject private var model: AppModel
     @ObservedObject var downloads: EpisodeDownloads
 
+    @State private var exportRequest: EpisodeExportRequest?
+
     private var groups: [(anime: Anime, records: [EpisodeDownload])] {
         Dictionary(grouping: downloads.records.values, by: { $0.anime.id })
             .values.compactMap { records in records.first.map { ($0.anime, records) } }
@@ -266,6 +269,20 @@ struct DownloadsView: View {
             }
         }
         .navigationTitle("Downloads")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Export all", systemImage: "square.and.arrow.up") {
+                    exportRequest = EpisodeExportRequest(episodeIDs: groups.flatMap { group in
+                        group.records.sorted { $0.catalogPosition < $1.catalogPosition }
+                            .filter { downloads.localURL(for: $0.id) != nil }.map(\.id)
+                    })
+                }
+                .disabled(!downloads.records.values.contains { downloads.localURL(for: $0.id) != nil })
+            }
+        }
+        .sheet(item: $exportRequest) { request in
+            EpisodeExportSheet(downloads: downloads, episodeIDs: request.episodeIDs)
+        }
         .task { await model.retryPendingWatchSync() }
         .refreshable { await model.retryPendingWatchSync() }
     }
@@ -279,6 +296,7 @@ private struct DownloadedAnimeView: View {
     @ObservedObject var progress: PlaybackProgressStore
     @State private var selected: EpisodeDownload?
     @State private var removing: EpisodeDownload?
+    @State private var exportRequest: EpisodeExportRequest?
 
     private var records: [EpisodeDownload] {
         downloads.records.values.filter { $0.anime.id == anime.id }
@@ -333,7 +351,8 @@ private struct DownloadedAnimeView: View {
                         LazyVStack(spacing: 12) {
                             ForEach(records) { record in
                                 EpisodeRow(anime: anime, episode: record.episode, library: library,
-                                           progressStore: progress, download: record, onRemove: { removing = record }) {
+                                           progressStore: progress, download: record,
+                                           onExport: { exportRequest = EpisodeExportRequest(episodeIDs: [record.id]) }, onRemove: { removing = record }) {
                                     selected = record
                                 }
                             }
@@ -346,6 +365,17 @@ private struct DownloadedAnimeView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Export all", systemImage: "square.and.arrow.up") {
+                    exportRequest = EpisodeExportRequest(episodeIDs: ready.map(\.id))
+                }
+                .disabled(ready.isEmpty)
+            }
+        }
+        .sheet(item: $exportRequest) { request in
+            EpisodeExportSheet(downloads: downloads, episodeIDs: request.episodeIDs)
+        }
         .task { await model.retryPendingWatchSync() }
         .confirmationDialog("Remove download?", isPresented: Binding(
             get: { removing != nil },
@@ -374,5 +404,79 @@ private struct DownloadSyncStatus: View {
               systemImage: "icloud")
             .font(.subheadline)
             .foregroundStyle(CloudTheme.cyan)
+    }
+}
+
+private struct EpisodeExportRequest: Identifiable {
+    let id = UUID()
+    let episodeIDs: [String]
+}
+
+private struct EpisodeExportSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let downloads: EpisodeDownloads
+    let episodeIDs: [String]
+    @State private var directory = URL.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    @State private var exportedFolder: URL?
+    @State private var failure: String?
+
+    var body: some View {
+        Group {
+            if let exportedFolder {
+                EpisodeFolderExporter(folder: exportedFolder) { dismiss() }
+                    .ignoresSafeArea()
+            } else {
+                NavigationStack {
+                    VStack(spacing: 16) {
+                        if let failure {
+                            Text(failure)
+                        } else {
+                            ProgressView("Preparing \(episodeIDs.count == 1 ? "episode" : "\(episodeIDs.count) episodes")…")
+                            Text("Episodes are organized into folders by anime. Choose where to save them in Files next.")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .multilineTextAlignment(.center)
+                    .padding(24)
+                    .navigationTitle("Export videos")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button(failure == nil ? "Cancel" : "Done") { dismiss() }
+                        }
+                    }
+                }
+            }
+        }
+        .task {
+            do {
+                exportedFolder = try await downloads.exportVideos(episodeIDs, to: directory)
+            } catch {
+                if !Task.isCancelled { failure = error.localizedDescription }
+            }
+        }
+        .onDisappear { try? FileManager.default.removeItem(at: directory) }
+    }
+}
+
+private struct EpisodeFolderExporter: UIViewControllerRepresentable {
+    let folder: URL
+    let onFinish: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(onFinish: onFinish) }
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forExporting: [folder], asCopy: true)
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ controller: UIDocumentPickerViewController, context: Context) {}
+
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        let onFinish: () -> Void
+        init(onFinish: @escaping () -> Void) { self.onFinish = onFinish }
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { onFinish() }
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) { onFinish() }
     }
 }
