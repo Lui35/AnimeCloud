@@ -29,6 +29,18 @@ A native SwiftUI client for discovering, tracking, and watching anime from the A
 - Arabic and English content support
 - A native SwiftUI codebase using URLSession, AVKit, Metal, SQLite, and CommonCrypto
 
+## Install from LiveContainer Sources
+
+In **LiveContainer → Sources → +**, add:
+
+```text
+https://github.com/Lui35/AnimeCloud/releases/latest/download/source.json
+```
+
+Or open [Add AnimeCloud to LiveContainer](livecontainer://source?url=https%3A%2F%2Fgithub.com%2FLui35%2FAnimeCloud%2Freleases%2Flatest%2Fdownload%2Fsource.json) on your phone. Confirm the source, then choose Anime Cloud and tap **Install**. Refresh the source to see new published releases.
+
+Each release generates its source metadata from the packaged IPA, including its exact version, build number, download size, and minimum iOS version. The source follows published releases; changes merged into `main` appear after a new release is published.
+
 ## Install the unsigned IPA
 
 Each versioned [GitHub Release](https://github.com/Lui35/AnimeCloud/releases) includes:
