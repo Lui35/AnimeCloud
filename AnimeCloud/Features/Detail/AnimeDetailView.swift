@@ -583,7 +583,7 @@ struct PlayerSheet: View {
     @State private var isFullscreen = false
     @StateObject private var anime4KBenchmark = Anime4KBenchmarkController()
     @StateObject private var pictureInPicture = PlaybackPictureInPicture()
-    @AppStorage("playback.skipFillerEpisodes") private var skipFillerEpisodes = false
+    @AppStorage("playback.skipFillerEpisodes") private var skipFillerEpisodes = true
     @AppStorage("playback.anime4k.mode") private var anime4KModeRawValue = Anime4KPlaybackMode.off.rawValue
     @AppStorage private var nextEpisodeLeadTime: Int
 
@@ -628,9 +628,9 @@ struct PlayerSheet: View {
                                         player: player,
                                         episode: immediateNextEpisode,
                                         preferredEpisode: nextEpisode,
+                                        alternateEpisode: alternateNextEpisode,
                                         skippingFillers: skipFillerEpisodes,
-                                        controlsAreVisible: true,
-                                        playImmediate: playImmediateNextEpisode,
+                                        playAlternate: playAlternateNextEpisode,
                                         assetDuration: assetDuration,
                                         leadTime: nextEpisodeLeadTime,
                                         isEpisodeComplete: false,
@@ -734,7 +734,7 @@ struct PlayerSheet: View {
                 nextEpisodeLeadTime: $nextEpisodeLeadTime,
                 isEpisodeComplete: $showingUpNext,
                 playNext: playNextEpisode,
-                playImmediate: playImmediateNextEpisode,
+                playAlternate: playAlternateNextEpisode,
                 error: $error,
                 retry: { retryToken = UUID() }
             )
@@ -834,8 +834,9 @@ struct PlayerSheet: View {
                     EpisodeTypeBadge(episode: nextEpisode ?? immediateNextEpisode)
                     EpisodeAdvanceButton(
                         immediateEpisode: immediateNextEpisode, preferredEpisode: nextEpisode,
+                        alternateEpisode: alternateNextEpisode,
                         skippingFillers: skipFillerEpisodes,
-                        action: playNextEpisode, playImmediate: playImmediateNextEpisode
+                        action: playNextEpisode, playAlternate: playAlternateNextEpisode
                     )
                 }
             } else {
@@ -856,6 +857,7 @@ struct PlayerSheet: View {
 
     private var immediateNextEpisode: Episode? { episodes.nextEpisode(after: episode) }
     private var nextEpisode: Episode? { episodes.nextEpisode(after: episode, skippingFillers: skipFillerEpisodes) }
+    private var alternateNextEpisode: Episode? { episodes.nextEpisode(after: episode, skippingFillers: !skipFillerEpisodes) }
 
     private var episodesForWatchStatus: [Episode] {
         guard downloadedPlayback else { return episodes }
@@ -867,9 +869,9 @@ struct PlayerSheet: View {
         playEpisode(nextEpisode)
     }
 
-    private func playImmediateNextEpisode() {
-        guard let immediateNextEpisode else { return }
-        playEpisode(immediateNextEpisode)
+    private func playAlternateNextEpisode() {
+        guard let alternateNextEpisode else { return }
+        playEpisode(alternateNextEpisode)
     }
 
     private func playEpisode(_ nextEpisode: Episode) {
@@ -1029,8 +1031,8 @@ private struct FullscreenPlaybackView: View {
     @Binding var nextEpisodeLeadTime: Int
     @Binding var isEpisodeComplete: Bool
     let playNext: () -> Void
-    let playImmediate: () -> Void
-    @AppStorage("playback.skipFillerEpisodes") private var skipFillerEpisodes = false
+    let playAlternate: () -> Void
+    @AppStorage("playback.skipFillerEpisodes") private var skipFillerEpisodes = true
     @Binding var error: String?
     let retry: () -> Void
     @State private var controlsAreVisible = true
@@ -1080,9 +1082,9 @@ private struct FullscreenPlaybackView: View {
                                 player: player,
                                 episode: nextEpisode,
                                 preferredEpisode: episodes.nextEpisode(after: episode, skippingFillers: skipFillerEpisodes),
+                                alternateEpisode: episodes.nextEpisode(after: episode, skippingFillers: !skipFillerEpisodes),
                                 skippingFillers: skipFillerEpisodes,
-                                controlsAreVisible: controlsAreVisible,
-                                playImmediate: playImmediate,
+                                playAlternate: playAlternate,
                                 assetDuration: assetDuration,
                                 leadTime: nextEpisodeLeadTime,
                                 isEpisodeComplete: isEpisodeComplete,
@@ -1092,9 +1094,9 @@ private struct FullscreenPlaybackView: View {
                     }
                     .id(ObjectIdentifier(player))
                     if let level {
-                        levelIndicator(level)
+                        levelIndicator(level, control: levelControl)
                     } else if let hardwareVolume {
-                        hardwareVolumeIndicator(hardwareVolume)
+                        levelIndicator(hardwareVolume, control: .volume)
                     }
                 } else {
                     VStack(spacing: 16) {
@@ -1276,12 +1278,13 @@ private struct FullscreenPlaybackView: View {
             }
     }
 
-    private func hardwareVolumeIndicator(_ volume: Double) -> some View {
-        VStack(spacing: 10) {
-            Image(systemName: volume == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill")
+    private func levelIndicator(_ level: Double, control: PlayerGestureZone) -> some View {
+        let isBrightness = control == .brightness
+        return VStack(spacing: 10) {
+            Image(systemName: isBrightness ? "sun.max.fill" : level == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill")
             ZStack(alignment: .bottom) {
                 Capsule().fill(.white.opacity(0.25))
-                Capsule().fill(.white).frame(height: 100 * volume)
+                Capsule().fill(.white).frame(height: 100 * level)
             }
             .frame(width: 6, height: 100)
         }
@@ -1289,29 +1292,9 @@ private struct FullscreenPlaybackView: View {
         .foregroundStyle(.white)
         .padding(14)
         .background(.black.opacity(0.85), in: Capsule())
-        .padding(.trailing, 24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-        .allowsHitTesting(false)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("System volume")
-        .accessibilityValue(Text(volume, format: .percent.precision(.fractionLength(0))))
-    }
-
-    private func levelIndicator(_ level: Double) -> some View {
-        let isBrightness = levelControl == .brightness
-        return VStack(spacing: 8) {
-            Image(systemName: isBrightness ? "sun.max.fill" : level == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill")
-            ProgressView(value: level)
-                .tint(.white)
-                .frame(width: 88)
-            Text(level, format: .percent.precision(.fractionLength(0)))
-                .font(.caption.monospacedDigit())
-        }
-        .foregroundStyle(.white)
-        .padding(12)
-        .background(.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 16))
         .padding(.horizontal, 24)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: isBrightness ? .trailing : .leading)
+        .environment(\.layoutDirection, .leftToRight)
         .allowsHitTesting(false)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(isBrightness ? "Brightness" : "System volume")
@@ -1330,14 +1313,23 @@ private struct PlayerSystemVolumeControl: UIViewRepresentable {
 }
 
 private struct EpisodeAdvanceButton: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let immediateEpisode: Episode
     let preferredEpisode: Episode?
+    let alternateEpisode: Episode?
     let skippingFillers: Bool
     let action: () -> Void
-    let playImmediate: () -> Void
+    let playAlternate: () -> Void
     @GestureState private var isPressing = false
+    @State private var holdProgress = 0.0
+    private let holdDuration = 0.65
 
-    private var skipsFiller: Bool { skippingFillers && immediateEpisode.isFiller }
+    private var fillerHint: String {
+        if skippingFillers {
+            return preferredEpisode == nil ? "Only filler remaining · Hold to watch" : "Skipping filler · Hold to watch"
+        }
+        return alternateEpisode == nil ? "Next is filler · No later non-filler" : "Next is filler · Hold to skip"
+    }
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 4) {
@@ -1349,25 +1341,42 @@ private struct EpisodeAdvanceButton: View {
             }
             .buttonStyle(.borderedProminent)
             .buttonBorderShape(.capsule)
-            .tint(skipsFiller ? .orange : .white)
+            .tint(immediateEpisode.isFiller ? .orange : .white)
             .foregroundStyle(.black)
             .opacity(isPressing ? 0.7 : 1)
+            .overlay {
+                Capsule()
+                    .trim(from: 0, to: holdProgress)
+                    .stroke(.black.opacity(0.7), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                    .padding(3)
+                    .allowsHitTesting(false)
+            }
+            .onChange(of: isPressing) { _, pressing in
+                withAnimation(pressing && !reduceMotion ? .linear(duration: holdDuration) : nil) {
+                    holdProgress = pressing ? 1 : 0
+                }
+            }
             .highPriorityGesture(
-                LongPressGesture(minimumDuration: 0.5)
+                LongPressGesture(minimumDuration: holdDuration)
                     .updating($isPressing) { value, state, _ in state = value }
                     .exclusively(before: TapGesture())
                     .onEnded { result in
                         switch result {
-                        case .first(true): playImmediate()
+                        case .first(true): if alternateEpisode != nil { playAlternate() }
                         case .second: action()
                         default: break
                         }
                     }
             )
             .accessibilityHint(preferredEpisode.map { Text($0.name) } ?? Text("Only filler episodes remain"))
-            .accessibilityAction(named: Text("Play next including filler"), playImmediate)
-            if skipsFiller {
-                Text(preferredEpisode == nil ? "Only filler remaining · Hold to watch" : "Skipping filler · Hold to watch")
+            .accessibilityActions {
+                if let alternateEpisode {
+                    Button(skippingFillers ? "Play next including filler" : "Play next non-filler episode", action: playAlternate)
+                        .accessibilityHint(alternateEpisode.name)
+                }
+            }
+            if immediateEpisode.isFiller {
+                Text(fillerHint)
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 8).padding(.vertical, 4)
@@ -1381,9 +1390,9 @@ private struct NextEpisodeButton: View {
     let player: AVPlayer
     let episode: Episode
     let preferredEpisode: Episode?
+    let alternateEpisode: Episode?
     let skippingFillers: Bool
-    let controlsAreVisible: Bool
-    let playImmediate: () -> Void
+    let playAlternate: () -> Void
     let assetDuration: Double
     let leadTime: Int
     let isEpisodeComplete: Bool
@@ -1394,11 +1403,12 @@ private struct NextEpisodeButton: View {
     var body: some View {
         ZStack {
             Color.clear.frame(width: 0, height: 0).allowsHitTesting(false)
-            if controlsAreVisible || isEpisodeComplete || isNearEnd {
+            if isEpisodeComplete || isNearEnd {
                 EpisodeAdvanceButton(
                     immediateEpisode: episode, preferredEpisode: preferredEpisode,
+                    alternateEpisode: alternateEpisode,
                     skippingFillers: skippingFillers,
-                    action: action, playImmediate: playImmediate
+                    action: action, playAlternate: playAlternate
                 )
             }
         }
