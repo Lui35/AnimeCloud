@@ -192,15 +192,28 @@ private struct ContinueWatchingCard: View {
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            RemoteArtwork(url: anime.imageURL).frame(height: 440)
-            LinearGradient(colors: [.clear, CloudTheme.ink.opacity(0.28), CloudTheme.ink], startPoint: .top, endPoint: .bottom)
+            NavigationLink(value: anime) {
+                ZStack {
+                    RemoteArtwork(url: anime.imageURL)
+                    LinearGradient(colors: [.clear, CloudTheme.ink.opacity(0.28), CloudTheme.ink], startPoint: .top, endPoint: .bottom)
+                }
+                .frame(height: 440)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("View details for \(anime.name)")
+            .accessibilityValue(playback.episode.name)
             VStack(alignment: .leading, spacing: 12) {
-                Text("CONTINUE WATCHING").font(.caption.weight(.black)).tracking(1.8).foregroundStyle(CloudTheme.cyan)
-                Text(anime.name).font(.system(size: 34, weight: .black, design: .rounded)).lineLimit(3)
-                Text(playback.episode.name).font(.subheadline).foregroundStyle(.white.opacity(0.78))
+                Group {
+                    Text("CONTINUE WATCHING").font(.caption.weight(.black)).tracking(1.8).foregroundStyle(CloudTheme.cyan)
+                    Text(anime.name).font(.system(size: 34, weight: .black, design: .rounded)).lineLimit(3)
+                    Text(playback.episode.name).font(.subheadline).foregroundStyle(.white.opacity(0.78))
+                }
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
                 HStack {
                     Button(action: play) {
-                        Label("Play", systemImage: "play.fill").font(.headline).padding(.horizontal, 18).padding(.vertical, 12).background(.white, in: Capsule()).foregroundStyle(CloudTheme.ink)
+                        Label("Play Now", systemImage: "play.fill").font(.headline).padding(.horizontal, 18).padding(.vertical, 12).background(.white, in: Capsule()).foregroundStyle(CloudTheme.ink)
                     }
                     .buttonStyle(.plain)
                     LibrarySaveMenu(anime: anime, store: library, size: 44)
