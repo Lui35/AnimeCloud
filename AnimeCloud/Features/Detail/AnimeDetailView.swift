@@ -1325,16 +1325,16 @@ private struct EpisodeAdvanceButton: View {
     private let holdDuration = 0.65
 
     private var fillerHint: String {
-        if skippingFillers {
-            return preferredEpisode == nil ? "Only filler remaining · Hold to watch" : "Skipping filler · Hold to watch"
+        if (skippingFillers ? preferredEpisode : alternateEpisode)?.isFiller == true {
+            return "Only filler remaining · Plays next episode"
         }
-        return alternateEpisode == nil ? "Next is filler · No later non-filler" : "Next is filler · Hold to skip"
+        return skippingFillers ? "Skipping filler · Hold to watch" : "Next is filler · Hold to skip"
     }
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 4) {
             Button(action: action) {
-                Label(preferredEpisode == nil ? "Filler remaining" : "Play Next", systemImage: "forward.fill")
+                Label("Play Next", systemImage: "forward.fill")
                     .font(.subheadline.weight(.semibold))
                     .padding(.horizontal, 16)
                     .frame(minHeight: 44)
