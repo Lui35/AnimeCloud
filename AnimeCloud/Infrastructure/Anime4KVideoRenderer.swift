@@ -873,7 +873,7 @@ struct PlaybackControls<NextEpisode: View>: View {
         duration = assetDuration
         let position = player.currentTime().seconds
         currentTime = position.isFinite ? position : 0
-        isPlaying = player.timeControlStatus == .playing
+        isPlaying = player.timeControlStatus != .paused
         timeObserver = player.addPeriodicTimeObserver(
             forInterval: CMTime(seconds: 0.25, preferredTimescale: 600),
             queue: .main
@@ -882,7 +882,7 @@ struct PlaybackControls<NextEpisode: View>: View {
             currentTime = time.seconds.isFinite ? time.seconds : 0
             let itemDuration = player.currentItem?.duration.seconds ?? 0
             duration = itemDuration.isFinite && itemDuration > 0 ? itemDuration : assetDuration
-            isPlaying = player.timeControlStatus == .playing
+            isPlaying = player.timeControlStatus != .paused
         }
     }
 
@@ -892,7 +892,7 @@ struct PlaybackControls<NextEpisode: View>: View {
     }
 
     private func togglePlayback() {
-        if player.timeControlStatus == .playing {
+        if isPlaying {
             player.pause()
             isPlaying = false
         } else {
