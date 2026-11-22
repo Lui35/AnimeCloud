@@ -114,7 +114,7 @@ extension Array where Element == Episode {
     /// episode is the item immediately before the current one.
     func nextEpisode(after episode: Episode, skippingFillers: Bool = false) -> Episode? {
         guard let index = firstIndex(where: { $0.id == episode.id }), index > startIndex else { return nil }
-        return self[..<index].reversed().first { !skippingFillers || !$0.isFiller }
+        return self[..<index].reversed().first { !skippingFillers || !$0.isFiller } ?? self[index - 1]
     }
 }
 
