@@ -112,9 +112,9 @@ struct EpisodeWatchRecord: Codable, Hashable, Sendable {
 extension Array where Element == Episode {
     /// Detail responses are ordered newest-first, so the next chronological
     /// episode is the item immediately before the current one.
-    func nextEpisode(after episode: Episode) -> Episode? {
+    func nextEpisode(after episode: Episode, skippingFillers: Bool = false) -> Episode? {
         guard let index = firstIndex(where: { $0.id == episode.id }), index > startIndex else { return nil }
-        return self[index - 1]
+        return self[..<index].reversed().first { !skippingFillers || !$0.isFiller }
     }
 }
 

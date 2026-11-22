@@ -3,6 +3,7 @@ import SwiftUI
 struct ProfileView: View {
     @EnvironmentObject private var model: AppModel
     @AppStorage("playback.blurUnwatchedThumbnails") private var blurUnwatchedThumbnails = false
+    @AppStorage("playback.skipFillerEpisodes") private var skipFillerEpisodes = false
     @State private var showingLogin = false
     @State private var showingRecovery = false
     @State private var showingAniList = false
@@ -77,6 +78,16 @@ struct ProfileView: View {
             AniListSettingsRow(sync: model.aniList) { showingAniList = true }
             Divider().overlay(Color.white.opacity(0.08))
             ClearAllResumePositionsRow(progress: model.playbackProgress)
+            Divider().overlay(Color.white.opacity(0.08))
+            Toggle(isOn: $skipFillerEpisodes) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("Skip filler episodes", systemImage: "forward.end")
+                    Text("Tap Play Next to skip filler. Hold to play the immediate next episode.")
+                        .font(.caption).foregroundStyle(CloudTheme.muted)
+                }
+            }
+            .tint(CloudTheme.cyan)
+            .padding(16)
             Divider().overlay(Color.white.opacity(0.08))
             Toggle(isOn: $blurUnwatchedThumbnails) {
                 HStack(spacing: 14) {

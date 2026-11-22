@@ -486,6 +486,33 @@ final class AnimeCloudTests: XCTestCase {
         XCTAssertNil(episodes.nextEpisode(after: episodes[0]))
     }
 
+    func testNextEpisodeSkipsConsecutiveFillersAndCanOverride() {
+        let episodes = [
+            Episode(id: "5", name: "Episode 5"),
+            Episode(id: "4", name: "Episode 4", filer: "1"),
+            Episode(id: "3", name: "Episode 3", filer: "1"),
+            Episode(id: "2", name: "Episode 2"),
+            Episode(id: "1", name: "Episode 1")
+        ]
+        XCTAssertEqual(episodes.nextEpisode(after: episodes[4], skippingFillers: true)?.id, "2")
+        XCTAssertEqual(episodes.nextEpisode(after: episodes[3], skippingFillers: true)?.id, "5")
+        XCTAssertEqual(episodes.nextEpisode(after: episodes[3])?.id, "3")
+        XCTAssertEqual(episodes.nextEpisode(after: episodes[2], skippingFillers: true)?.id, "5")
+        XCTAssertNil(episodes.nextEpisode(after: episodes[0], skippingFillers: true))
+        XCTAssertNil(episodes.nextEpisode(after: Episode(id: "missing", name: "Episode 0"), skippingFillers: true))
+    }
+
+    func testNextEpisodeWithOnlyFillerRemainingAndOfflineGaps() {
+        let filler = Episode(id: "4", name: "Episode 4", filer: "1")
+        let current = Episode(id: "1", name: "Episode 1")
+        let offline = [filler, current]
+        XCTAssertNil(offline.nextEpisode(after: current, skippingFillers: true))
+        XCTAssertEqual(offline.nextEpisode(after: current)?.id, filler.id)
+        let laterCanon = Episode(id: "8", name: "Episode 8")
+        XCTAssertEqual([laterCanon, filler, current].nextEpisode(after: current, skippingFillers: true)?.id, laterCanon.id)
+        XCTAssertNil([Episode]().nextEpisode(after: current, skippingFillers: true))
+    }
+
     @MainActor
     func testExportOrganizesEpisodesAndPreservesOriginals() async throws {
         let suite = "AnimeCloudTests.export.\(UUID())"

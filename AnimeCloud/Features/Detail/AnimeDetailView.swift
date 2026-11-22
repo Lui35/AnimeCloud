@@ -247,7 +247,7 @@ struct AnimePlaybackMenu: View {
     }
 }
 
-private struct AnimeDetailScrollOffsetKey: PreferenceKey {
+struct AnimeDetailScrollOffsetKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
@@ -583,6 +583,7 @@ struct PlayerSheet: View {
     @State private var isFullscreen = false
     @StateObject private var anime4KBenchmark = Anime4KBenchmarkController()
     @StateObject private var pictureInPicture = PlaybackPictureInPicture()
+    @AppStorage("playback.skipFillerEpisodes") private var skipFillerEpisodes = false
     @AppStorage("playback.anime4k.mode") private var anime4KModeRawValue = Anime4KPlaybackMode.off.rawValue
     @AppStorage private var nextEpisodeLeadTime: Int
 
@@ -622,10 +623,14 @@ struct PlayerSheet: View {
                                 toggleFullscreen: { isFullscreen = true },
                                 onSwipeDown: closePlayer
                             ) {
-                                if !showingUpNext, let nextEpisode {
+                                if !showingUpNext, let immediateNextEpisode {
                                     NextEpisodeButton(
                                         player: player,
-                                        episode: nextEpisode,
+                                        episode: immediateNextEpisode,
+                                        preferredEpisode: nextEpisode,
+                                        skippingFillers: skipFillerEpisodes,
+                                        controlsAreVisible: true,
+                                        playImmediate: playImmediateNextEpisode,
                                         assetDuration: assetDuration,
                                         leadTime: nextEpisodeLeadTime,
                                         isEpisodeComplete: false,
@@ -722,12 +727,14 @@ struct PlayerSheet: View {
                 benchmark: anime4KBenchmark,
                 pictureInPicture: pictureInPicture,
                 isPresented: $isFullscreen,
+                animeName: anime.name,
                 episodes: episodes,
                 episode: $episode,
                 assetDuration: $assetDuration,
                 nextEpisodeLeadTime: $nextEpisodeLeadTime,
                 isEpisodeComplete: $showingUpNext,
                 playNext: playNextEpisode,
+                playImmediate: playImmediateNextEpisode,
                 error: $error,
                 retry: { retryToken = UUID() }
             )
@@ -819,14 +826,17 @@ struct PlayerSheet: View {
     @ViewBuilder private var upNextPanel: some View {
         VStack(spacing: 14) {
             Text("EPISODE COMPLETE").font(.caption.weight(.black)).tracking(1.5).foregroundStyle(CloudTheme.cyan)
-            if let nextEpisode {
+            if let immediateNextEpisode {
                 Text("Up next").font(.title2.bold())
-                Text(nextEpisode.name).font(.headline).foregroundStyle(.white.opacity(0.78))
+                Text((nextEpisode ?? immediateNextEpisode).name).font(.headline).foregroundStyle(.white.opacity(0.78))
                 HStack(spacing: 10) {
                     Spacer()
-                    EpisodeTypeBadge(episode: nextEpisode)
-                    Button { playNextEpisode() } label: { Label("Play Next", systemImage: "forward.fill") }
-                        .buttonStyle(.borderedProminent).tint(CloudTheme.violet)
+                    EpisodeTypeBadge(episode: nextEpisode ?? immediateNextEpisode)
+                    EpisodeAdvanceButton(
+                        immediateEpisode: immediateNextEpisode, preferredEpisode: nextEpisode,
+                        skippingFillers: skipFillerEpisodes,
+                        action: playNextEpisode, playImmediate: playImmediateNextEpisode
+                    )
                 }
             } else {
                 Text(downloadedPlayback ? "No more downloaded episodes" : "You’re all caught up").font(.title2.bold())
@@ -844,7 +854,8 @@ struct PlayerSheet: View {
         .padding(16)
     }
 
-    private var nextEpisode: Episode? { episodes.nextEpisode(after: episode) }
+    private var immediateNextEpisode: Episode? { episodes.nextEpisode(after: episode) }
+    private var nextEpisode: Episode? { episodes.nextEpisode(after: episode, skippingFillers: skipFillerEpisodes) }
 
     private var episodesForWatchStatus: [Episode] {
         guard downloadedPlayback else { return episodes }
@@ -852,7 +863,17 @@ struct PlayerSheet: View {
     }
 
     private func playNextEpisode() {
-        guard player != nil, let nextEpisode else { return }
+        guard let nextEpisode else { return }
+        playEpisode(nextEpisode)
+    }
+
+    private func playImmediateNextEpisode() {
+        guard let immediateNextEpisode else { return }
+        playEpisode(immediateNextEpisode)
+    }
+
+    private func playEpisode(_ nextEpisode: Episode) {
+        guard player != nil else { return }
         tearDownPlayer(deactivateAudio: false)
         if !showingUpNext {
             progressStore.clear(episodeID: episode.id)
@@ -1001,12 +1022,15 @@ private struct FullscreenPlaybackView: View {
     @ObservedObject var benchmark: Anime4KBenchmarkController
     let pictureInPicture: PlaybackPictureInPicture
     @Binding var isPresented: Bool
+    let animeName: String
     let episodes: [Episode]
     @Binding var episode: Episode
     @Binding var assetDuration: Double
     @Binding var nextEpisodeLeadTime: Int
     @Binding var isEpisodeComplete: Bool
     let playNext: () -> Void
+    let playImmediate: () -> Void
+    @AppStorage("playback.skipFillerEpisodes") private var skipFillerEpisodes = false
     @Binding var error: String?
     let retry: () -> Void
     @State private var controlsAreVisible = true
@@ -1015,6 +1039,9 @@ private struct FullscreenPlaybackView: View {
     @State private var level: Double?
     @State private var levelControl: PlayerGestureZone = .volume
     @State private var levelHideTask: Task<Void, Never>?
+    @State private var hardwareVolume: Double?
+    @State private var hardwareVolumeHideTask: Task<Void, Never>?
+    @State private var lastVolumeGestureAt = Date.distantPast
     @State private var systemVolumeView = MPVolumeView(frame: CGRect(x: 0, y: 0, width: 120, height: 44))
 
     var body: some View {
@@ -1052,6 +1079,10 @@ private struct FullscreenPlaybackView: View {
                             NextEpisodeButton(
                                 player: player,
                                 episode: nextEpisode,
+                                preferredEpisode: episodes.nextEpisode(after: episode, skippingFillers: skipFillerEpisodes),
+                                skippingFillers: skipFillerEpisodes,
+                                controlsAreVisible: controlsAreVisible,
+                                playImmediate: playImmediate,
                                 assetDuration: assetDuration,
                                 leadTime: nextEpisodeLeadTime,
                                 isEpisodeComplete: isEpisodeComplete,
@@ -1062,6 +1093,8 @@ private struct FullscreenPlaybackView: View {
                     .id(ObjectIdentifier(player))
                     if let level {
                         levelIndicator(level)
+                    } else if let hardwareVolume {
+                        hardwareVolumeIndicator(hardwareVolume)
                     }
                 } else {
                     VStack(spacing: 16) {
@@ -1103,7 +1136,13 @@ private struct FullscreenPlaybackView: View {
                     .accessibilityLabel("Run Device Benchmark")
                     .background(.regularMaterial, in: Circle())
 
-                    Spacer()
+                    VStack(spacing: 3) {
+                        Text(animeName).font(.subheadline.weight(.semibold)).lineLimit(1)
+                        Text(episode.name).font(.caption).lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 8)
+                    .shadow(color: .black, radius: 4)
 
                     HStack(spacing: 6) {
                         PlaybackOutputControls(pictureInPicture: pictureInPicture, isEnhanced: mode.preset != nil)
@@ -1130,6 +1169,17 @@ private struct FullscreenPlaybackView: View {
                 controlsAreVisible = true
             }
         }
+        .onReceive(AVAudioSession.sharedInstance().publisher(for: \.outputVolume).dropFirst().receive(on: RunLoop.main)) { volume in
+            guard startingLevel == nil, Date().timeIntervalSince(lastVolumeGestureAt) > 0.3,
+                  player != nil, !benchmark.isRunning, benchmark.report == nil else { return }
+            hardwareVolumeHideTask?.cancel()
+            hardwareVolume = Double(volume)
+            hardwareVolumeHideTask = Task { @MainActor in
+                try? await Task.sleep(for: .seconds(1.5))
+                guard !Task.isCancelled else { return }
+                hardwareVolume = nil
+            }
+        }
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
         .task {
@@ -1141,6 +1191,7 @@ private struct FullscreenPlaybackView: View {
         .onDisappear {
             controlHideTask?.cancel()
             levelHideTask?.cancel()
+            hardwareVolumeHideTask?.cancel()
             PlaybackOrientation.request(.portrait)
         }
     }
@@ -1202,6 +1253,9 @@ private struct FullscreenPlaybackView: View {
                 if zone == .brightness {
                     screen?.brightness = CGFloat(adjusted)
                 } else {
+                    lastVolumeGestureAt = Date()
+                    hardwareVolumeHideTask?.cancel()
+                    hardwareVolume = nil
                     volumeSlider?.setValue(Float(adjusted), animated: false)
                     volumeSlider?.sendActions(for: .valueChanged)
                 }
@@ -1220,6 +1274,27 @@ private struct FullscreenPlaybackView: View {
                     exitOnCenterSwipe(value.translation)
                 }
             }
+    }
+
+    private func hardwareVolumeIndicator(_ volume: Double) -> some View {
+        VStack(spacing: 10) {
+            Image(systemName: volume == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill")
+            ZStack(alignment: .bottom) {
+                Capsule().fill(.white.opacity(0.25))
+                Capsule().fill(.white).frame(height: 100 * volume)
+            }
+            .frame(width: 6, height: 100)
+        }
+        .font(.caption)
+        .foregroundStyle(.white)
+        .padding(14)
+        .background(.black.opacity(0.85), in: Capsule())
+        .padding(.trailing, 24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+        .allowsHitTesting(false)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("System volume")
+        .accessibilityValue(Text(volume, format: .percent.precision(.fractionLength(0))))
     }
 
     private func levelIndicator(_ level: Double) -> some View {
@@ -1254,9 +1329,61 @@ private struct PlayerSystemVolumeControl: UIViewRepresentable {
     func updateUIView(_ uiView: MPVolumeView, context: Context) {}
 }
 
+private struct EpisodeAdvanceButton: View {
+    let immediateEpisode: Episode
+    let preferredEpisode: Episode?
+    let skippingFillers: Bool
+    let action: () -> Void
+    let playImmediate: () -> Void
+    @GestureState private var isPressing = false
+
+    private var skipsFiller: Bool { skippingFillers && immediateEpisode.isFiller }
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            Button(action: action) {
+                Label(preferredEpisode == nil ? "Filler remaining" : "Play Next", systemImage: "forward.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 16)
+                    .frame(minHeight: 44)
+            }
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
+            .tint(skipsFiller ? .orange : .white)
+            .foregroundStyle(.black)
+            .opacity(isPressing ? 0.7 : 1)
+            .highPriorityGesture(
+                LongPressGesture(minimumDuration: 0.5)
+                    .updating($isPressing) { value, state, _ in state = value }
+                    .exclusively(before: TapGesture())
+                    .onEnded { result in
+                        switch result {
+                        case .first(true): playImmediate()
+                        case .second: action()
+                        default: break
+                        }
+                    }
+            )
+            .accessibilityHint(preferredEpisode.map { Text($0.name) } ?? Text("Only filler episodes remain"))
+            .accessibilityAction(named: Text("Play next including filler"), playImmediate)
+            if skipsFiller {
+                Text(preferredEpisode == nil ? "Only filler remaining · Hold to watch" : "Skipping filler · Hold to watch")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(.black.opacity(0.8), in: Capsule())
+            }
+        }
+    }
+}
+
 private struct NextEpisodeButton: View {
     let player: AVPlayer
     let episode: Episode
+    let preferredEpisode: Episode?
+    let skippingFillers: Bool
+    let controlsAreVisible: Bool
+    let playImmediate: () -> Void
     let assetDuration: Double
     let leadTime: Int
     let isEpisodeComplete: Bool
@@ -1267,18 +1394,12 @@ private struct NextEpisodeButton: View {
     var body: some View {
         ZStack {
             Color.clear.frame(width: 0, height: 0).allowsHitTesting(false)
-            if isEpisodeComplete || isNearEnd {
-                Button(action: action) {
-                    Label("Play Next", systemImage: "forward.fill")
-                        .font(.subheadline.weight(.semibold))
-                        .padding(.horizontal, 16)
-                        .frame(minHeight: 44)
-                }
-                .buttonStyle(.borderedProminent)
-                .buttonBorderShape(.capsule)
-                .tint(.white)
-                .foregroundStyle(.black)
-                .accessibilityHint(Text(episode.name))
+            if controlsAreVisible || isEpisodeComplete || isNearEnd {
+                EpisodeAdvanceButton(
+                    immediateEpisode: episode, preferredEpisode: preferredEpisode,
+                    skippingFillers: skippingFillers,
+                    action: action, playImmediate: playImmediate
+                )
             }
         }
         .onAppear {

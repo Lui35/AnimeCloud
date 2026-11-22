@@ -289,6 +289,9 @@ struct DownloadsView: View {
 }
 
 private struct DownloadedAnimeView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @State private var navigationVisibility = ScrollAwareNavigationVisibility()
     @EnvironmentObject private var model: AppModel
     let anime: Anime
     @ObservedObject var downloads: EpisodeDownloads
@@ -322,50 +325,76 @@ private struct DownloadedAnimeView: View {
     }
 
     var body: some View {
-        ZStack {
-            CloudBackground()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    AnimeDetailHero(
-                        anime: anime,
-                        cachedArtworkURL: downloads.artworkURL(for: anime.id),
-                        playbackMenu: AnimePlaybackMenu(animeID: anime.id, progress: progress, episodeIDs: Set(records.map(\.id)))
-                    ) {
-                        HStack(spacing: 12) {
-                            if let record = resumeOrNext {
-                                Button { selected = record } label: {
-                                    Label(progress.progress(for: record.id) == nil ? "Play downloaded episode" : "Resume watching",
-                                          systemImage: "play.fill")
+        GeometryReader { geometry in
+            ZStack {
+                CloudBackground()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
+                        AnimeDetailHero(
+                            anime: anime,
+                            cachedArtworkURL: downloads.artworkURL(for: anime.id),
+                            artworkHeight: verticalSizeClass == .compact ? 430 : 520,
+                            topInset: geometry.safeAreaInsets.top
+                        ) {
+                            HStack(spacing: 12) {
+                                if let record = resumeOrNext {
+                                    Button { selected = record } label: {
+                                        Label(progress.progress(for: record.id) == nil ? "Play downloaded episode" : "Resume watching",
+                                              systemImage: "play.fill")
+                                    }
+                                    .buttonStyle(PrimaryCapsuleStyle())
                                 }
-                                .buttonStyle(PrimaryCapsuleStyle())
-                            }
-                            LibrarySaveMenu(anime: anime, store: library, size: 48)
-                        }
-                    }
-                    VStack(alignment: .leading, spacing: 14) {
-                        if model.hasPendingCloudChanges { DownloadSyncStatus() }
-                        SectionHeading(title: "Downloaded episodes", subtitle: "Newest first")
-                        if records.isEmpty {
-                            Text("No episodes saved on this device.").foregroundStyle(CloudTheme.muted)
-                        }
-                        LazyVStack(spacing: 12) {
-                            ForEach(records) { record in
-                                EpisodeRow(anime: anime, episode: record.episode, library: library,
-                                           progressStore: progress, download: record,
-                                           onExport: { exportRequest = EpisodeExportRequest(episodeIDs: [record.id]) }, onRemove: { removing = record }) {
-                                    selected = record
-                                }
+                                LibrarySaveMenu(anime: anime, store: library, size: 48)
                             }
                         }
+                        .background {
+                            GeometryReader { proxy in
+                                Color.clear.preference(
+                                    key: AnimeDetailScrollOffsetKey.self,
+                                    value: proxy.frame(in: .named("downloadedAnimeScroll")).minY
+                                )
+                            }
+                        }
+                        VStack(alignment: .leading, spacing: 14) {
+                            if model.hasPendingCloudChanges { DownloadSyncStatus() }
+                            SectionHeading(title: "Downloaded episodes", subtitle: "Newest first")
+                            if records.isEmpty {
+                                Text("No episodes saved on this device.").foregroundStyle(CloudTheme.muted)
+                            }
+                            LazyVStack(spacing: 12) {
+                                ForEach(records) { record in
+                                    EpisodeRow(anime: anime, episode: record.episode, library: library,
+                                               progressStore: progress, download: record,
+                                               onExport: { exportRequest = EpisodeExportRequest(episodeIDs: [record.id]) }, onRemove: { removing = record }) {
+                                        selected = record
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 16)
                     }
-                    .padding(.horizontal, 16)
+                    .padding(.bottom, 110)
                 }
-                .padding(.bottom, 110)
+                .ignoresSafeArea(.container, edges: .top)
+                .coordinateSpace(name: "downloadedAnimeScroll")
+                .onPreferenceChange(AnimeDetailScrollOffsetKey.self) { offset in
+                    var next = navigationVisibility
+                    next.update(offset: offset)
+                    if reduceMotion || next.isVisible == navigationVisibility.isVisible {
+                        navigationVisibility = next
+                    } else {
+                        withAnimation(.snappy(duration: 0.22)) { navigationVisibility = next }
+                    }
+                }
             }
         }
+        .toolbar(navigationVisibility.isVisible ? .visible : .hidden, for: .navigationBar)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                AnimePlaybackMenu(animeID: anime.id, progress: progress, episodeIDs: Set(records.map(\.id)), isToolbarItem: true)
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Export all", systemImage: "square.and.arrow.up") {
                     exportRequest = EpisodeExportRequest(episodeIDs: ready.map(\.id))
