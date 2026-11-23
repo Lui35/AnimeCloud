@@ -1,8 +1,58 @@
 import XCTest
 import UIKit
+import GoogleCast
 @testable import AnimeCloud
 
 final class AnimeCloudTests: XCTestCase {
+    func testCastMediaPreservesEpisodeIdentityAndStreamMetadata() {
+        let episode = Episode(id: "ep1", name: "Episode 1")
+        let item = CastEpisode(anime: Anime(id: "show1", name: "Test Series"), episode: episode,
+                               url: URL(string: "https://example.com/video.M3U8?token=test")!, duration: 1440)
+        let media = item.mediaInformation()
+        XCTAssertTrue(item.isSupported)
+        XCTAssertEqual(media.contentURL, item.url)
+        XCTAssertEqual(media.contentType, "application/x-mpegURL")
+        XCTAssertEqual(media.streamDuration, 1440)
+        XCTAssertEqual(media.metadata?.string(forKey: kGCKMetadataKeyTitle), "Test Series")
+        XCTAssertEqual(media.metadata?.string(forKey: kGCKMetadataKeySubtitle), "Episode 1")
+        XCTAssertTrue(item.matches(media))
+        XCTAssertFalse(item.matches(nil))
+        let different = CastEpisode(anime: Anime(id: "show2", name: "Different Series"), episode: episode,
+                                    url: item.url, duration: 1440)
+        XCTAssertFalse(different.matches(media), "A TV update for another anime must not overwrite this episode's progress")
+    }
+
+    func testCastRejectsDeviceOnlySourcesAndHandlesUnknownDuration() {
+        for source in ["file:///private/download.mp4", "http://", "data:video/mp4;base64,AAAA", "ftp://example.com/video.mp4"] {
+            let item = CastEpisode(anime: Anime(id: "show1", name: "Test"), episode: Episode(id: "1", name: "1"),
+                                   url: URL(string: source)!, duration: .nan)
+            XCTAssertFalse(item.isSupported, source)
+            XCTAssertEqual(item.mediaInformation().streamDuration, 0)
+        }
+        for (path, type) in [("video.mp4", "video/mp4"), ("video.mpd", "application/dash+xml"), ("video.webm", "video/webm")] {
+            let item = CastEpisode(anime: Anime(id: "show1", name: "Test"), episode: Episode(id: "1", name: "1"),
+                                   url: URL(string: "https://example.com/\(path)")!, duration: -10)
+            XCTAssertEqual(item.mediaInformation().contentType, type)
+            XCTAssertEqual(item.mediaInformation().streamDuration, 0)
+        }
+    }
+
+    @MainActor
+    func testCastDelegateSelectorsAndBundledUIResources() {
+        let cast = ChromecastPlayback.shared
+        for selector in ["sessionManager:didStartSession:", "sessionManager:didResumeSession:",
+                         "sessionManager:didEndSession:withError:", "sessionManager:didSuspendSession:withReason:",
+                         "request:didAbortWithReason:", "remoteMediaClient:didUpdateMediaStatus:"] {
+            XCTAssertTrue(cast.responds(to: NSSelectorFromString(selector)), selector)
+        }
+        let resources = Bundle(for: GCKUICastButton.self)
+        XCTAssertNotNil(resources.url(forResource: "GoogleCastUIResources", withExtension: "bundle"),
+                        "The SDK integration must include the picker/controller resources")
+        let bonjour = Bundle.main.object(forInfoDictionaryKey: "NSBonjourServices") as? [String]
+        XCTAssertTrue(bonjour?.contains("_CC1AD845._googlecast._tcp") == true)
+        XCTAssertNotNil(Bundle.main.object(forInfoDictionaryKey: "NSLocalNetworkUsageDescription"))
+    }
+
     @MainActor
     func testPlaybackKeepsDisplayAwakeAndRestoresIdleTimer() {
         let application = UIApplication.shared

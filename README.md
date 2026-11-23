@@ -62,11 +62,11 @@ shasum -a 256 -c AnimeCloud-vX.Y.Z-unsigned.ipa.sha256
 
 Requirements:
 
-- Xcode 16 or newer
+- Xcode 26.3 or newer (required by the current Cast SDK)
 - iOS 17 or newer deployment target
 - An Apple Development team when installing directly on a physical device
 
-AnimeCloud vendors its Anime4K Metal package, so no package download is required. Xcode 26 separates the Metal compiler into a downloadable component; install it once if Xcode prompts, or run:
+AnimeCloud vendors its Anime4K Metal package. Xcode downloads the pinned Google Cast SDK and its session-fetcher dependency through Swift Package Manager. Xcode 26 separates the Metal compiler into a downloadable component; install it once if Xcode prompts, or run:
 
 ```sh
 xcodebuild -downloadComponent MetalToolchain
@@ -79,7 +79,7 @@ Then:
 3. Choose your team under **Signing & Capabilities**.
 4. Build and run.
 
-No dependency fetch is required; the compatible Anime4K Metal source and notices are kept under `ThirdParty/`.
+The compatible Anime4K Metal source and notices are kept under `ThirdParty/`. Commit `Package.resolved` when updating the Cast SDK so local builds and CI use the same versions.
 
 To produce the same unsigned device archive used by CI:
 
@@ -96,6 +96,18 @@ Open **Downloads → Export all** to save every completed download, or open an a
 Exports contain an **Anime Cloud** folder with one folder per anime and video filenames such as `Series - Episode 1.mp4`. Duplicate names receive a number instead of overwriting another episode. The exported copies remain available after removing downloads from the app, and can be opened from Files in compatible players such as VLC.
 
 Streaming downloads are converted to MP4 when iOS supports it. If conversion fails, the export reports an error and keeps the original downloads intact. Only completed downloads are included; exports need additional free space for the copies.
+
+## Chromecast / Google Cast
+
+Open an online episode and tap the Cast icon in the player. Allow **Local Network** access when prompted, and select a Chromecast or Google Cast TV on the same Wi-Fi network. Playback transfers at your current position. **TV controls** opens Google's remote player for pause, seek, volume, and subtitles offered by the stream. **Play on this iPhone** stops casting and returns to the TV's last reported position, preserving its play/pause state.
+
+Closing the player leaves the TV playing, with a small controller at the bottom of the app. TV progress and completion update the library while the app is running; iOS may suspend progress updates in the background until you return. Filler-aware next-episode controls still appear near the end of the episode in the player.
+
+Downloaded files cannot be cast. The TV must be able to fetch and decode the online source itself; server restrictions, missing CORS support, expired URLs, and unsupported TV codecs can prevent playback even when the same video works on the iPhone. Anime4K enhancement applies to the phone, not the TV. AirPlay remains available separately.
+
+The static SDK is linked through Swift Package Manager; `Scripts/copy-cast-resources.sh` copies its matching UI bundles and privacy manifest during builds.
+
+This uses Google's Default Media Receiver, so no custom receiver registration or API key is needed. Discovery starts after tapping the Cast button. Cast SDK diagnostic analytics collection is disabled by the app.
 
 ## Anime4K playback
 
