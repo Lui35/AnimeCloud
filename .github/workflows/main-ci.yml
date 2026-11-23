@@ -28,8 +28,10 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - name: Show build environment
-        run: xcodebuild -version
+      - name: Prepare Xcode and Metal
+        run: |
+          xcodebuild -version
+          xcrun metal --version || xcodebuild -downloadComponent MetalToolchain
 
       - name: Test LiveContainer source generation
         run: python3 Scripts/test-generate-source.py
