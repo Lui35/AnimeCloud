@@ -31,8 +31,14 @@ struct DiscoverView: View {
                     .padding(.horizontal, 18)
                     .padding(.bottom, 110)
                 }
+                .refreshable { await model.loadCatalog(force: true) }
             }
             .navigationTitle("Discover")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink { ScheduleView() } label: { Label("Weekly schedule", systemImage: "calendar") }
+                }
+            }
             .searchable(text: $query, prompt: "Titles, keywords, years")
             .task { await model.loadCatalog() }
             .navigationDestination(for: Anime.self) { AnimeDetailView(anime: $0, library: model.library) }

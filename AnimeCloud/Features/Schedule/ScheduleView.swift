@@ -7,41 +7,38 @@ struct ScheduleView: View {
     private let dayNames = ["1": "Sunday", "2": "Monday", "3": "Tuesday", "4": "Wednesday", "5": "Thursday", "6": "Friday", "7": "Saturday"]
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                CloudBackground()
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        dayStrip
-                        if displayed.isEmpty {
-                            EmptyCloud(title: "Nothing scheduled", detail: "Choose another day or pull Home to refresh the schedule.", systemImage: "calendar.badge.exclamationmark")
-                                .frame(height: 420)
-                        } else {
-                            ForEach(displayed) { anime in
-                                HStack(spacing: 8) {
-                                    NavigationLink(value: anime) {
-                                        HStack(spacing: 14) {
-                                            RemoteArtwork(url: anime.imageURL).frame(width: 90, height: 122).clipShape(RoundedRectangle(cornerRadius: 16))
-                                            VStack(alignment: .leading, spacing: 8) {
-                                                Text(anime.name).font(.headline).multilineTextAlignment(.leading)
-                                                Text(anime.subtitle).font(.caption).foregroundStyle(CloudTheme.muted)
-                                                Label(dayNames[anime.day ?? ""] ?? "Scheduled", systemImage: "clock")
-                                                    .font(.caption.weight(.semibold)).foregroundStyle(CloudTheme.cyan)
-                                            }
-                                            Spacer(minLength: 0)
-                                        }.contentShape(Rectangle())
-                                    }.buttonStyle(.plain)
-                                    LibraryQuickAddMenu(anime: anime, store: model.library)
-                                }
-                                .padding(11).cloudPanel()
+        ZStack {
+            CloudBackground()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    dayStrip
+                    if displayed.isEmpty {
+                        EmptyCloud(title: "Nothing scheduled", detail: "Choose another day or pull Home to refresh the schedule.", systemImage: "calendar.badge.exclamationmark")
+                            .frame(height: 420)
+                    } else {
+                        ForEach(displayed) { anime in
+                            HStack(spacing: 8) {
+                                NavigationLink(value: anime) {
+                                    HStack(spacing: 14) {
+                                        RemoteArtwork(url: anime.imageURL).frame(width: 90, height: 122).clipShape(RoundedRectangle(cornerRadius: 16))
+                                        VStack(alignment: .leading, spacing: 8) {
+                                            Text(anime.name).font(.headline).multilineTextAlignment(.leading)
+                                            Text(anime.subtitle).font(.caption).foregroundStyle(CloudTheme.muted)
+                                            Label(dayNames[anime.day ?? ""] ?? "Scheduled", systemImage: "clock")
+                                                .font(.caption.weight(.semibold)).foregroundStyle(CloudTheme.cyan)
+                                        }
+                                        Spacer(minLength: 0)
+                                    }.contentShape(Rectangle())
+                                }.buttonStyle(.plain)
+                                LibraryQuickAddMenu(anime: anime, store: model.library)
                             }
+                            .padding(11).cloudPanel()
                         }
-                    }.padding(18).padding(.bottom, 100)
-                }
+                    }
+                }.padding(18).padding(.bottom, 100)
             }
-            .navigationTitle("Weekly drops")
-            .navigationDestination(for: Anime.self) { AnimeDetailView(anime: $0, library: model.library) }
         }
+        .navigationTitle("Weekly drops")
     }
 
     private var displayed: [Anime] {

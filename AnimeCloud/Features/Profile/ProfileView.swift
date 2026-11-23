@@ -7,6 +7,7 @@ struct ProfileView: View {
     @State private var showingLogin = false
     @State private var showingRecovery = false
     @State private var showingAniList = false
+    @State private var showingGemini = false
 
     var body: some View {
         NavigationStack {
@@ -25,6 +26,7 @@ struct ProfileView: View {
         .sheet(isPresented: $showingLogin) { LoginView() }
         .sheet(isPresented: $showingRecovery) { PasswordRecoveryView() }
         .sheet(isPresented: $showingAniList) { AniListSetupView(sync: model.aniList) }
+        .sheet(isPresented: $showingGemini) { GeminiSetupView(settings: model.gemini) }
     }
 
     private var identity: some View {
@@ -103,11 +105,7 @@ struct ProfileView: View {
             Divider().overlay(Color.white.opacity(0.08))
             setting("Recover password", icon: "key") { showingRecovery = true }
             Divider().overlay(Color.white.opacity(0.08))
-            HStack(spacing: 14) {
-                Image(systemName: "brain.head.profile").foregroundStyle(CloudTheme.cyan).frame(width: 24)
-                VStack(alignment: .leading) { Text("AI discovery"); Text("Private catalog mode • Gemini-ready").font(.caption).foregroundStyle(CloudTheme.muted) }
-                Spacer(); Image(systemName: "checkmark.seal.fill").foregroundStyle(CloudTheme.cyan)
-            }.padding(16)
+            setting("Gemini watch planner", icon: "sparkle.magnifyingglass") { showingGemini = true }
             if model.session != nil {
                 Divider().overlay(Color.white.opacity(0.08))
                 setting("Sign out", icon: "rectangle.portrait.and.arrow.right", role: .destructive) { model.logout() }

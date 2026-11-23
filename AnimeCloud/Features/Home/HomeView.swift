@@ -19,6 +19,7 @@ struct HomeView: View {
                         } else if model.isBootstrapping && model.featured.isEmpty {
                             ProgressView().frame(maxWidth: .infinity).padding(.top, 120)
                         }
+                        ContinueWatchPlanCard(store: model.watchPlans, library: library)
                         if !library.recentAnime.isEmpty { posterRail(title: "Continue exploring", items: library.recentAnime) }
                         if !model.featured.isEmpty { posterRail(title: "Trending in the cloud", items: model.featured) }
                         if !model.newlyAddedEpisodes.isEmpty { newEpisodesRail }

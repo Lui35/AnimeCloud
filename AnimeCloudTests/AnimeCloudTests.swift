@@ -525,6 +525,305 @@ final class AnimeCloudTests: XCTestCase {
     }
 
     @MainActor
+    func testEpisodeAdvanceShortTapFiresExactlyOnce() {
+        let control = EpisodeAdvanceControl(holdDuration: 0.65)
+        var events: [String] = []
+        control.onTap = { events.append("tap") }
+        control.onHold = { events.append("hold") }
+        control.onPressChanged = { events.append($0 ? "down" : "up") }
+        control.sendActions(for: .touchDown)
+        control.sendActions(for: .touchUpInside)
+        control.sendActions(for: .touchUpInside)
+        XCTAssertEqual(events, ["down", "up", "tap"])
+    }
+
+    @MainActor
+    func testEpisodeAdvanceHoldDoesNotAlsoTapOnRelease() async {
+        let control = EpisodeAdvanceControl(holdDuration: 0.01)
+        let held = expectation(description: "Hold recognized")
+        var taps = 0
+        var holds = 0
+        control.onTap = { taps += 1 }
+        control.onHold = { holds += 1; held.fulfill() }
+        control.sendActions(for: .touchDown)
+        await fulfillment(of: [held], timeout: 1)
+        control.sendActions(for: .touchUpInside)
+        XCTAssertEqual(holds, 1)
+        XCTAssertEqual(taps, 0)
+    }
+
+    @MainActor
+    func testEpisodeAdvanceDragCancellationFiresNeitherAction() async {
+        let control = EpisodeAdvanceControl(holdDuration: 0.01)
+        let action = expectation(description: "Cancelled press has no action")
+        action.isInverted = true
+        control.onTap = { action.fulfill() }
+        control.onHold = { action.fulfill() }
+        control.sendActions(for: .touchDown)
+        control.sendActions(for: .touchDragExit)
+        control.sendActions(for: .touchUpInside)
+        await fulfillment(of: [action], timeout: 0.05)
+    }
+
+    func testCatalogCacheKeysIncludeCommandAndEveryField() async throws {
+        let (session, cache) = catalogCacheFixture()
+        let api = LegacyAPI(session: session, cache: cache)
+        _ = try await api.catalog(.getAllAnime, fields: ["year": "2025", "hiddenMode": "0"])
+        _ = try await api.catalog(.getAllAnime, fields: ["hiddenMode": "0", "year": "2025"])
+        XCTAssertEqual(CatalogCacheFixtureProtocol.requests, 1)
+        _ = try await api.catalog(.getAllAnime, fields: ["year": "2026", "hiddenMode": "0"])
+        _ = try await api.catalog(.getMost, fields: ["year": "2025", "hiddenMode": "0"])
+        XCTAssertEqual(CatalogCacheFixtureProtocol.requests, 3)
+    }
+
+    func testConcurrentCatalogRequestsShareOneFetch() async throws {
+        let (session, cache) = catalogCacheFixture()
+        CatalogCacheFixtureProtocol.delay = 0.05
+        let api = LegacyAPI(session: session, cache: cache)
+        async let first = api.catalog(.getAllAnime)
+        async let second = api.catalog(.getAllAnime)
+        let values = try await (first, second)
+        XCTAssertEqual(values.0, values.1)
+        XCTAssertEqual(CatalogCacheFixtureProtocol.requests, 1)
+    }
+
+    func testCatalogCacheSurvivesClientRecreationExpiresAndAllowsRefresh() async throws {
+        let (session, cache) = catalogCacheFixture()
+        let original = LegacyAPI(session: session, cache: cache, now: { Date(timeIntervalSince1970: 1_000) })
+        _ = try await original.catalog(.getAllAnime)
+        let restored = LegacyAPI(session: session, cache: cache, now: { Date(timeIntervalSince1970: 1_001) })
+        _ = try await restored.catalog(.getAllAnime)
+        XCTAssertEqual(CatalogCacheFixtureProtocol.requests, 1)
+        let expired = LegacyAPI(session: session, cache: cache, now: { Date(timeIntervalSince1970: 1_301) })
+        _ = try await expired.catalog(.getAllAnime)
+        XCTAssertEqual(CatalogCacheFixtureProtocol.requests, 2)
+        _ = try await expired.catalog(.getAllAnime, forceRefresh: true)
+        XCTAssertEqual(CatalogCacheFixtureProtocol.requests, 3)
+    }
+
+    func testCatalogCacheRejectsHTTPAndMalformedResponses() async throws {
+        let (session, cache) = catalogCacheFixture()
+        let api = LegacyAPI(session: session, cache: cache)
+        CatalogCacheFixtureProtocol.status = 500
+        do {
+            _ = try await api.catalog(.getAllAnime)
+            XCTFail("HTTP errors must not be cached")
+        } catch {}
+        CatalogCacheFixtureProtocol.status = 200
+        CatalogCacheFixtureProtocol.body = Data("invalid JSON".utf8)
+        do {
+            _ = try await api.catalog(.getAllAnime)
+            XCTFail("Invalid JSON must not be cached")
+        } catch {}
+        CatalogCacheFixtureProtocol.body = CatalogCacheFixtureProtocol.catalogBody
+        let values = try await api.catalog(.getAllAnime)
+        let cached = try await api.catalog(.getAllAnime)
+        XCTAssertEqual(values, cached)
+        XCTAssertEqual(CatalogCacheFixtureProtocol.requests, 3)
+    }
+
+    func testCatalogCacheOfflineFallbackIsBoundedAndDoesNotHideCancellation() async throws {
+        let (session, cache) = catalogCacheFixture()
+        let original = LegacyAPI(session: session, cache: cache, now: { Date(timeIntervalSince1970: 1_000) })
+        let expected = try await original.catalog(.getAllAnime)
+        let offline = LegacyAPI(session: session, cache: cache, now: { Date(timeIntervalSince1970: 1_400) })
+        CatalogCacheFixtureProtocol.failure = .notConnectedToInternet
+        let values = try await offline.catalog(.getAllAnime)
+        XCTAssertEqual(values, expected)
+        let tooOld = LegacyAPI(session: session, cache: cache, now: { Date(timeIntervalSince1970: 1_000 + 8 * 24 * 60 * 60) })
+        do {
+            _ = try await tooOld.catalog(.getAllAnime)
+            XCTFail("Expired offline data must not be used indefinitely")
+        } catch let error as URLError { XCTAssertEqual(error.code, .notConnectedToInternet) }
+        CatalogCacheFixtureProtocol.failure = .cancelled
+        do {
+            _ = try await offline.catalog(.getAllAnime)
+            XCTFail("Cancellation must not return cached data")
+        } catch let error as URLError { XCTAssertEqual(error.code, .cancelled) }
+        CatalogCacheFixtureProtocol.failure = nil
+        CatalogCacheFixtureProtocol.status = 500
+        do {
+            _ = try await offline.catalog(.getAllAnime)
+            XCTFail("A server error must remain visible")
+        } catch let error as APIError {
+            guard case .server(500) = error else { return XCTFail("Expected HTTP 500") }
+        }
+    }
+
+    func testPlaybackURLsAndAccountRequestsAreNeverCached() async throws {
+        let (session, cache) = catalogCacheFixture()
+        let api = LegacyAPI(session: session, cache: cache)
+        CatalogCacheFixtureProtocol.body = Data(#"{"result":[{"url":"https://example.com/episode.mp4"}]}"#.utf8)
+        _ = try await api.playback(epID: "1", quality: "720")
+        _ = try await api.playback(epID: "1", quality: "720")
+        CatalogCacheFixtureProtocol.body = Data(#"{"result":[]}"#.utf8)
+        _ = try await api.comments(animeID: "1")
+        _ = try await api.comments(animeID: "1")
+        XCTAssertEqual(CatalogCacheFixtureProtocol.requests, 4)
+        XCTAssertNil(LegacyCommand.userLogin.cacheLifetime)
+        XCTAssertNil(LegacyCommand.saveBackup.cacheLifetime)
+        XCTAssertNil(LegacyCommand.addComment.cacheLifetime)
+    }
+
+    private func catalogCacheFixture() -> (URLSession, URLCache) {
+        CatalogCacheFixtureProtocol.requests = 0
+        CatalogCacheFixtureProtocol.status = 200
+        CatalogCacheFixtureProtocol.failure = nil
+        CatalogCacheFixtureProtocol.delay = 0
+        CatalogCacheFixtureProtocol.body = CatalogCacheFixtureProtocol.catalogBody
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.urlCache = nil
+        configuration.protocolClasses = [CatalogCacheFixtureProtocol.self]
+        return (URLSession(configuration: configuration), URLCache(memoryCapacity: 1_024 * 1_024, diskCapacity: 0, diskPath: nil))
+    }
+
+    func testWatchOrderKeepsResearchedOrderAndMatchesAliasesWithoutSortingByYear() throws {
+        let anchor = Anime(id: "second", name: "Sky Chronicle II", year: "2017")
+        let first = Anime(id: "first", name: "Sky Chronicle", year: "2019")
+        let plan = try GeminiWatchOrderService.parse(watchResearchFixture(), anime: anchor, mode: .firstWatch, catalog: [anchor, first])
+        XCTAssertEqual(plan.steps.map(\.anime?.id), ["first", "second"])
+        XCTAssertEqual(plan.sources.first?.url.absoluteString, "https://example.com/viewing-guide")
+        XCTAssertFalse(plan.searchSuggestions.isEmpty)
+        XCTAssertEqual(plan.mode, .firstWatch)
+    }
+
+    func testWatchOrderRejectsUngroundedAndIncompleteAnswers() throws {
+        let anchor = Anime(id: "second", name: "Sky Chronicle II", year: "2017")
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: watchResearchFixture()) as? [String: Any])
+        object["steps"] = [["type": "model_output", "content": [["type": "text", "text": "{}"]]]]
+        XCTAssertThrowsError(try GeminiWatchOrderService.parse(JSONSerialization.data(withJSONObject: object), anime: anchor, mode: .firstWatch, catalog: [anchor]))
+        object = try XCTUnwrap(JSONSerialization.jsonObject(with: watchResearchFixture()) as? [String: Any])
+        object["status"] = "in_progress"
+        XCTAssertThrowsError(try GeminiWatchOrderService.parse(JSONSerialization.data(withJSONObject: object), anime: anchor, mode: .firstWatch, catalog: [anchor]))
+    }
+
+    func testWatchOrderRejectsDuplicatePartsAndUnsafeSources() throws {
+        let anchor = Anime(id: "second", name: "Sky Chronicle II", year: "2017")
+        XCTAssertThrowsError(try GeminiWatchOrderService.parse(watchResearchFixture(duplicate: true), anime: anchor, mode: .firstWatch, catalog: [anchor]))
+        XCTAssertThrowsError(try GeminiWatchOrderService.parse(watchResearchFixture(sourceURL: "javascript:alert(1)"), anime: anchor, mode: .firstWatch, catalog: [anchor]))
+        XCTAssertFalse(WatchSource.isWebURL(URL(string: "file:///etc/passwd")!))
+        XCTAssertFalse(WatchSource.isWebURL(URL(string: "https://user:secret@example.com")!))
+        XCTAssertThrowsError(try GeminiWatchOrderService.parse(watchResearchFixture(), anime: Anime(id: "wrong", name: "Another franchise"), mode: .firstWatch, catalog: []))
+    }
+
+    func testWatchTitleMatchingKeepsAmbiguousOrDifferentAdaptationsUnmatched() {
+        let step = WatchPlanStep(title: "Cloud Story", aliases: ["قصة الغيمة"], year: 2020, format: "TV", isOptional: false, reason: "Start here")
+        let original = Anime(id: "original", name: "Cloud Story", year: "2020")
+        let remake = Anime(id: "remake", name: "Cloud Story", year: "2025")
+        XCTAssertEqual(step.matched(in: [original, remake])?.id, original.id)
+        XCTAssertNil(step.matched(in: [remake]))
+        XCTAssertNil(step.matched(in: [original, Anime(id: "duplicate", name: "Cloud Story", year: "2020")]))
+        XCTAssertEqual(step.matched(in: [Anime(id: "arabic", name: "قصة الغيمة", year: "2020")])?.id, "arabic")
+    }
+
+    func testGeminiResearchRequestUsesSearchAndStructuredOutputWithoutLeakingKeyIntoPrompt() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [WatchResearchFixtureProtocol.self]
+        WatchResearchFixtureProtocol.responseBody = try watchResearchFixture()
+        WatchResearchFixtureProtocol.status = 200
+        let service = GeminiWatchOrderService(session: URLSession(configuration: configuration))
+        let anchor = Anime(id: "second", name: "Sky Chronicle II", year: "2017")
+        let plan = try await service.research(anime: anchor, related: [], mode: .chronological, catalog: [anchor], apiKey: "fixture-only-not-a-real-key")
+        XCTAssertEqual(plan.mode, .chronological)
+        let request = try XCTUnwrap(WatchResearchFixtureProtocol.requestBody)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: request) as? [String: Any])
+        XCTAssertEqual(json["model"] as? String, GeminiWatchOrderService.model)
+        XCTAssertEqual(json["store"] as? Bool, false)
+        XCTAssertEqual((json["tools"] as? [[String: String]])?.first?["type"], "google_search")
+        XCTAssertEqual((json["response_format"] as? [String: Any])?["mime_type"] as? String, "application/json")
+        XCTAssertFalse(String(decoding: request, as: UTF8.self).contains("fixture-only-not-a-real-key"))
+        XCTAssertTrue(WatchResearchFixtureProtocol.keyHeaderWasPresent)
+        XCTAssertNil(WatchResearchFixtureProtocol.url?.query)
+    }
+
+    func testGeminiResearchSurfacesQuotaInsteadOfInventingAPlan() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [WatchResearchFixtureProtocol.self]
+        WatchResearchFixtureProtocol.status = 429
+        WatchResearchFixtureProtocol.responseBody = Data()
+        defer { WatchResearchFixtureProtocol.status = 200 }
+        let service = GeminiWatchOrderService(session: URLSession(configuration: configuration))
+        do {
+            _ = try await service.research(anime: Anime(id: "1", name: "Cloud Story"), related: [], mode: .firstWatch, catalog: [], apiKey: "fixture-only-not-a-real-key")
+            XCTFail("Quota failure must not produce an invented local order")
+        } catch let error as WatchOrderError {
+            guard case .quota = error else { return XCTFail("Expected quota error") }
+        }
+    }
+
+    @MainActor
+    func testWatchPlanPersistenceAndProgressKeepMissingRequiredPartsInSequence() throws {
+        let suiteName = "AnimeCloudTests.watchPlan.\(UUID())"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let library = LibraryStore(defaults: defaults)
+        let store = WatchPlanStore(defaults: defaults)
+        let anchor = Anime(id: "second", name: "Sky Chronicle II", year: "2017")
+        let first = Anime(id: "first", name: "Sky Chronicle", year: "2019")
+        var plan = try GeminiWatchOrderService.parse(watchResearchFixture(), anime: anchor, mode: .firstWatch, catalog: [anchor, first])
+        plan.steps.insert(WatchPlanStep(title: "Required film", aliases: [], year: 2018, format: "Movie", isOptional: false, reason: "Required story between parts"), at: 1)
+        try store.save(plan)
+        library.setCategory(.watched, for: first)
+        XCTAssertEqual(store.nextStep(in: plan, library: library)?.title, "Required film", "Do not skip a missing required upload")
+        let restored = WatchPlanStore(defaults: defaults)
+        XCTAssertEqual(restored.plans.first?.steps.count, 3)
+        XCTAssertEqual(restored.plans.first?.sources, plan.sources)
+        try restored.update(plan.id) { $0.steps[1].completionOverride = true }
+        XCTAssertEqual(restored.nextStep(in: restored.plans[0], library: library)?.anime?.id, anchor.id)
+        XCTAssertNil(library.category(for: anchor), "Plan-only completion must not rewrite the library")
+    }
+
+    @MainActor
+    func testWatchPlanOptionalPartsAndManualRewatchOverride() throws {
+        let suiteName = "AnimeCloudTests.optionalPlan.\(UUID())"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let library = LibraryStore(defaults: defaults)
+        let store = WatchPlanStore(defaults: defaults)
+        let anchor = Anime(id: "second", name: "Sky Chronicle II", year: "2017")
+        var plan = try GeminiWatchOrderService.parse(watchResearchFixture(), anime: anchor, mode: .firstWatch, catalog: [anchor])
+        plan.steps.insert(WatchPlanStep(title: "Side story", aliases: [], year: 2016, format: "OVA", isOptional: true, reason: "Optional"), at: 0)
+        XCTAssertEqual(store.nextStep(in: plan, library: library)?.title, "Sky Chronicle")
+        plan.includeOptional = true
+        XCTAssertEqual(store.nextStep(in: plan, library: library)?.title, "Side story")
+        library.setCategory(.watched, for: anchor)
+        XCTAssertTrue(store.isComplete(plan.steps[2], library: library))
+        plan.steps[2].completionOverride = false
+        XCTAssertFalse(store.isComplete(plan.steps[2], library: library), "Explicit rewatch overrides past library completion")
+    }
+
+    @MainActor
+    func testUpdatingResearchedPlanPreservesProgressAndEncodingFailureKeepsSavedData() throws {
+        let suiteName = "AnimeCloudTests.updatePlan.\(UUID())"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = WatchPlanStore(defaults: defaults)
+        let anchor = Anime(id: "second", name: "Sky Chronicle II", year: "2017")
+        var plan = try GeminiWatchOrderService.parse(watchResearchFixture(), anime: anchor, mode: .firstWatch, catalog: [anchor])
+        plan.steps[0].completionOverride = true
+        try store.save(plan)
+        let regenerated = try GeminiWatchOrderService.parse(watchResearchFixture(), anime: anchor, mode: .firstWatch, catalog: [anchor])
+        try store.save(regenerated)
+        XCTAssertEqual(store.plans[0].steps[0].completionOverride, true)
+        let invalid = WatchPlan(anchor: anchor, mode: .firstWatch, guide: "Invalid timestamp", cautions: [], steps: [], sources: [], searchSuggestions: "", researchedAt: Date(timeIntervalSince1970: .infinity))
+        XCTAssertThrowsError(try store.save(invalid))
+        XCTAssertEqual(store.plans.count, 1)
+        XCTAssertEqual(store.plans[0].steps.count, 2)
+    }
+
+    private func watchResearchFixture(duplicate: Bool = false, sourceURL: String = "https://example.com/viewing-guide") throws -> Data {
+        let first: [String: Any] = ["title": "Sky Chronicle", "aliases": [], "year": 2019, "format": "TV", "optional": false, "reason": "Start with the recommended introduction"]
+        let second: [String: Any] = ["title": "Sky Chronicle II", "aliases": [], "year": 2017, "format": "TV", "optional": false, "reason": "Watch after the introduction despite the release dates"]
+        let payload: [String: Any] = ["guide": "1. Sky Chronicle\n2. Sky Chronicle II", "cautions": ["Fixture guidance, not a live researched order"], "parts": duplicate ? [second, second] : [first, second]]
+        let text = String(decoding: try JSONSerialization.data(withJSONObject: payload), as: UTF8.self)
+        return try JSONSerialization.data(withJSONObject: ["status": "completed", "steps": [
+            ["type": "google_search_call", "arguments": ["queries": ["viewing order"]]],
+            ["type": "google_search_result", "result": [["search_suggestions": "<a href='https://www.google.com/search?q=viewing+order'>Search</a>"]]],
+            ["type": "model_output", "content": [["type": "text", "text": text, "annotations": [["type": "url_citation", "title": "Viewing guide", "url": sourceURL, "start_index": 0, "end_index": 10]]]]]
+        ]])
+    }
+
+    @MainActor
     func testExportOrganizesEpisodesAndPreservesOriginals() async throws {
         let suite = "AnimeCloudTests.export.\(UUID())"
         let defaults = UserDefaults(suiteName: suite)!
@@ -845,6 +1144,72 @@ private final class RestoreFixtureProtocol: URLProtocol {
         let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: body)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
+private final class CatalogCacheFixtureProtocol: URLProtocol {
+    static let catalogBody = Data(#"{"result":[{"id":"1","name":"Cloud Story"}]}"#.utf8)
+    static var requests = 0
+    static var status = 200
+    static var body = catalogBody
+    static var failure: URLError.Code?
+    static var delay: TimeInterval = 0
+    private static let lock = NSLock()
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        Self.lock.lock()
+        Self.requests += 1
+        Self.lock.unlock()
+        let status = Self.status
+        let body = Self.body
+        let failure = Self.failure
+        DispatchQueue.global().asyncAfter(deadline: .now() + Self.delay) {
+            if let failure {
+                self.client?.urlProtocol(self, didFailWithError: URLError(failure))
+                return
+            }
+            let response = HTTPURLResponse(url: self.request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
+            self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            self.client?.urlProtocol(self, didLoad: body)
+            self.client?.urlProtocolDidFinishLoading(self)
+        }
+    }
+
+    override func stopLoading() {}
+}
+
+private final class WatchResearchFixtureProtocol: URLProtocol {
+    static var status = 200
+    static var responseBody = Data()
+    static var requestBody: Data?
+    static var keyHeaderWasPresent = false
+    static var url: URL?
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        Self.url = request.url
+        Self.keyHeaderWasPresent = request.value(forHTTPHeaderField: "x-goog-api-key") != nil
+        if let body = request.httpBody { Self.requestBody = body }
+        else if let stream = request.httpBodyStream {
+            stream.open()
+            defer { stream.close() }
+            var body = Data()
+            var buffer = [UInt8](repeating: 0, count: 4096)
+            while stream.hasBytesAvailable {
+                let count = stream.read(&buffer, maxLength: buffer.count)
+                if count <= 0 { break }
+                body.append(buffer, count: count)
+            }
+            Self.requestBody = body
+        }
+        let response = HTTPURLResponse(url: request.url!, statusCode: Self.status, httpVersion: nil, headerFields: nil)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Self.responseBody)
         client?.urlProtocolDidFinishLoading(self)
     }
     override func stopLoading() {}

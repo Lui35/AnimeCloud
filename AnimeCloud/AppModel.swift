@@ -9,7 +9,9 @@ final class AppModel: ObservableObject {
     let library: LibraryStore
     let playbackProgress: PlaybackProgressStore
     let downloads: EpisodeDownloads
-    let discovery = GroundedDiscoveryService()
+    let watchOrder = GeminiWatchOrderService()
+    let gemini = GeminiSettings()
+    let watchPlans: WatchPlanStore
     let aniList = AniListSyncManager()
 
     @Published var featured: [Anime] = []
@@ -39,6 +41,7 @@ final class AppModel: ObservableObject {
     init(api: LegacyAPI, defaults: UserDefaults = .standard) {
         self.api = api
         self.defaults = defaults
+        watchPlans = WatchPlanStore(defaults: defaults)
         library = LibraryStore(defaults: defaults)
         playbackProgress = PlaybackProgressStore(defaults: defaults)
         downloads = EpisodeDownloads(api: api, defaults: defaults)
@@ -49,17 +52,17 @@ final class AppModel: ObservableObject {
         library.onChange = { [weak self] in self?.libraryDidChange() }
     }
 
-    func bootstrap() async {
+    func bootstrap(forceRefresh: Bool = false) async {
         guard !didBootstrap else { return }
         didBootstrap = true
         isBootstrapping = true
-        async let featuredResult = try? api.catalog(.getMost, fields: visibilityFields)
-        async let scheduleResult = try? api.catalog(.getAnimeWithDays, fields: visibilityFields)
-        async let newEpisodesResult = try? api.newlyAddedEpisodes()
+        async let featuredResult = try? api.catalog(.getMost, fields: visibilityFields, forceRefresh: forceRefresh)
+        async let scheduleResult = try? api.catalog(.getAnimeWithDays, fields: visibilityFields, forceRefresh: forceRefresh)
+        async let newEpisodesResult = try? api.newlyAddedEpisodes(forceRefresh: forceRefresh)
         let (newFeatured, newSchedule, newEpisodes) = await (featuredResult, scheduleResult, newEpisodesResult)
-        featured = newFeatured ?? []
-        schedule = newSchedule ?? []
-        newlyAddedEpisodes = newEpisodes ?? []
+        featured = newFeatured ?? featured
+        schedule = newSchedule ?? schedule
+        newlyAddedEpisodes = newEpisodes ?? newlyAddedEpisodes
         isBootstrapping = false
         if session != nil {
             Task { await synchronizeCloud(uploadIfDirty: true, showResult: false) }
@@ -112,7 +115,7 @@ final class AppModel: ObservableObject {
                 catalogLoadTask = nil
             }
             do {
-                catalog = try await api.catalog(.getAllAnime, fields: visibilityFields)
+                catalog = try await api.catalog(.getAllAnime, fields: visibilityFields, forceRefresh: force)
                 library.hydrate(with: catalog)
             } catch is CancellationError {
                 return
@@ -128,7 +131,7 @@ final class AppModel: ObservableObject {
 
     func refresh() async {
         didBootstrap = false
-        await bootstrap()
+        await bootstrap(forceRefresh: true)
     }
 
     func login(email: String, password: String) async -> Bool {
@@ -332,7 +335,7 @@ final class AppModel: ObservableObject {
     private func revisionKey(for account: UserSession) -> String { "cloud.revision.\(account.userID)" }
     private func dirtyKey(for account: UserSession) -> String { "cloud.dirty.\(account.userID)" }
 
-    private var knownAnime: [Anime] {
+    var knownAnime: [Anime] {
         Array(Dictionary(
             (catalog + featured + schedule + newlyAddedEpisodes + library.favorites + library.recentAnime).map { ($0.id, $0) },
             uniquingKeysWith: { first, _ in first }
