@@ -17,6 +17,21 @@ enum LegacyCommand: String, CaseIterable, Sendable {
     case addComment, updateComment, deleteComment, reportComment
     case addlike, addDisLike, uploadProfilePicture, saveBackup
 
+    var cacheLifetime: TimeInterval? {
+        switch self {
+        case .getGenres, .getYears, .getSeason, .getAges, .getAnimeMoreDetails:
+            return 24 * 60 * 60
+        case .getAnimeWithDays, .getNewEpAndAnime:
+            return 60
+        case .getMost, .getByYear, .getBySeason, .getByGenres, .getByRank,
+             .getByContinue, .getByFinished, .getAllAnime, .getByAge, .getAllMovies,
+             .getRelatedAnime, .getAnimeDetails, .getNews, .getNewsDetails:
+            return 5 * 60
+        default:
+            return nil
+        }
+    }
+
     var gateway: Gateway {
         switch self {
         case .userLogin, .userSignup, .activateUserAccount, .recoverPassword,
@@ -61,28 +76,41 @@ enum APIError: LocalizedError {
 }
 
 actor LegacyAPI {
-    static let live = LegacyAPI()
+    static let live = LegacyAPI(cache: URLCache(
+        memoryCapacity: 8 * 1_024 * 1_024,
+        diskCapacity: 64 * 1_024 * 1_024,
+        diskPath: "anime-cloud-catalog"
+    ))
 
     private let session: URLSession
     private let decoder: JSONDecoder
+    private let cache: URLCache
+    private let now: @Sendable () -> Date
+    private var pendingCatalogRequests: [URL: Task<Data, Error>] = [:]
     private let playbackDecryptor = RNCryptorPlaybackDecryptor(password: "anime5w&f4H&434*")
 
-    init(session: URLSession = .shared) {
+    init(
+        session: URLSession = .shared,
+        cache: URLCache = URLCache(memoryCapacity: 8 * 1_024 * 1_024, diskCapacity: 0, diskPath: nil),
+        now: @escaping @Sendable () -> Date = { Date() }
+    ) {
         self.session = session
+        self.cache = cache
+        self.now = now
         self.decoder = JSONDecoder()
     }
 
-    func catalog(_ command: LegacyCommand, fields: [String: String] = [:]) async throws -> [Anime] {
-        try await decode(APIEnvelope<[Anime]>.self, command: command, fields: fields).result
+    func catalog(_ command: LegacyCommand, fields: [String: String] = [:], forceRefresh: Bool = false) async throws -> [Anime] {
+        try await decode(APIEnvelope<[Anime]>.self, command: command, fields: fields, forceRefresh: forceRefresh).result
     }
 
     func namedValues(_ command: LegacyCommand) async throws -> [NamedValue] {
         try await decode(APIEnvelope<[NamedValue]>.self, command: command).result
     }
 
-    func animeDetail(id: String) async throws -> AnimeDetail {
-        async let primary = decode(DetailEnvelope.self, command: .getAnimeDetails, fields: ["animeID": id])
-        async let more = decode(APIEnvelope<[AnimeMoreDetails]>.self, command: .getAnimeMoreDetails, fields: ["animeID": id])
+    func animeDetail(id: String, forceRefresh: Bool = false) async throws -> AnimeDetail {
+        async let primary = decode(DetailEnvelope.self, command: .getAnimeDetails, fields: ["animeID": id], forceRefresh: forceRefresh)
+        async let more = decode(APIEnvelope<[AnimeMoreDetails]>.self, command: .getAnimeMoreDetails, fields: ["animeID": id], forceRefresh: forceRefresh)
         let (detail, extra) = try await (primary, more)
         return AnimeDetail(
             summary: detail.mainResult?.first,
@@ -102,11 +130,12 @@ actor LegacyAPI {
         ]).filter { $0.id != animeID }
     }
 
-    func newlyAddedEpisodes() async throws -> [Anime] {
+    func newlyAddedEpisodes(forceRefresh: Bool = false) async throws -> [Anime] {
         let envelope = try await decode(
             NewContentEnvelope.self,
             command: .getNewEpAndAnime,
-            fields: ["cmode": "0", "hiddenMode": "0"]
+            fields: ["cmode": "0", "hiddenMode": "0"],
+            forceRefresh: forceRefresh
         )
         return envelope.result2 ?? []
     }
@@ -229,15 +258,64 @@ actor LegacyAPI {
         return data
     }
 
-    private func decode<T: Decodable>(_ type: T.Type, command: LegacyCommand, fields: [String: String] = [:]) async throws -> T {
-        let data = try await request(command, fields: fields)
-        do { return try decoder.decode(type, from: data) }
+    private func decode<T: Decodable>(
+        _ type: T.Type, command: LegacyCommand, fields: [String: String] = [:], forceRefresh: Bool = false
+    ) async throws -> T {
+        guard let lifetime = command.cacheLifetime else {
+            let data = try await request(command, fields: fields)
+            do { return try decoder.decode(type, from: data) }
+            catch { throw APIError.decoding(error) }
+        }
+
+        // The API uses POST for reads, so key the cache explicitly by command and every field.
+        var components = URLComponents(url: command.gateway.url.appendingPathComponent(command.rawValue), resolvingAgainstBaseURL: false)!
+        components.percentEncodedQuery = formEncode(fields)
+        let cacheRequest = URLRequest(url: components.url!)
+        let cached = cache.cachedResponse(for: cacheRequest)
+        let storedAt = (cached?.response as? HTTPURLResponse)?
+            .value(forHTTPHeaderField: "X-AnimeCloud-Cached-At").flatMap(Double.init) ?? -.infinity
+        let age = now().timeIntervalSince1970 - storedAt
+        if !forceRefresh, age >= 0, age < lifetime, let cached,
+           let value = try? decoder.decode(type, from: cached.data) {
+            return value
+        }
+
+        let data: Data
+        do {
+            data = try await catalogData(command, fields: fields, key: cacheRequest.url!)
+            try Task.checkCancellation()
+        } catch {
+            if let networkError = error as? URLError,
+               [.notConnectedToInternet, .networkConnectionLost, .timedOut, .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed].contains(networkError.code),
+               age >= 0, age < 7 * 24 * 60 * 60, let cached,
+               let value = try? decoder.decode(type, from: cached.data) {
+                return value
+            }
+            throw error
+        }
+
+        let value: T
+        do { value = try decoder.decode(type, from: data) }
         catch { throw APIError.decoding(error) }
+        let response = HTTPURLResponse(url: cacheRequest.url!, statusCode: 200, httpVersion: nil, headerFields: [
+            "X-AnimeCloud-Cached-At": String(now().timeIntervalSince1970)
+        ])!
+        cache.storeCachedResponse(CachedURLResponse(response: response, data: data, storagePolicy: .allowed), for: cacheRequest)
+        return value
+    }
+
+    private func catalogData(_ command: LegacyCommand, fields: [String: String], key: URL) async throws -> Data {
+        if let task = pendingCatalogRequests[key] { return try await task.value }
+        let task = Task { try await request(command, fields: fields) }
+        pendingCatalogRequests[key] = task
+        defer { pendingCatalogRequests[key] = nil }
+        return try await task.value
     }
 
     private func request(_ command: LegacyCommand, fields: [String: String] = [:]) async throws -> Data {
         var request = URLRequest(url: command.gateway.url)
         request.httpMethod = "POST"
+        request.cachePolicy = .reloadIgnoringLocalCacheData
         request.timeoutInterval = 25
         request.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
         request.setValue("AnimeCloud/1.0 iOS", forHTTPHeaderField: "User-Agent")

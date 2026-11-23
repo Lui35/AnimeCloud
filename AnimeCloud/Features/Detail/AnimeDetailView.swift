@@ -42,6 +42,7 @@ struct AnimeDetailView: View {
                 .ignoresSafeArea(.container, edges: .top)
                 .coordinateSpace(name: "animeDetailScroll")
                 .onPreferenceChange(AnimeDetailScrollOffsetKey.self, perform: updateNavigationVisibility)
+                .refreshable { await load(forceRefresh: true) }
             }
         }
         .navigationBarTitleDisplayMode(.inline)
@@ -153,10 +154,10 @@ struct AnimeDetailView: View {
         }
     }
 
-    private func load() async {
+    private func load(forceRefresh: Bool = false) async {
         library.recordOpened(anime)
-        let loadedDetail = try? await model.api.animeDetail(id: anime.id)
-        detail = loadedDetail
+        let loadedDetail = try? await model.api.animeDetail(id: anime.id, forceRefresh: forceRefresh)
+        detail = loadedDetail ?? detail
         if let episodes = loadedDetail?.episodes {
             model.applyAniListProgress(to: anime, episodes: episodes)
         }
@@ -317,6 +318,19 @@ private struct RelatedAnimeView: View {
                     .padding(18)
                 }
             }
+        }
+        .safeAreaInset(edge: .top) {
+            NavigationLink { WatchOrderView(anime: anime, related: items) } label: {
+                HStack {
+                    Label("Watch order", systemImage: "list.number").font(.headline)
+                    Spacer()
+                    Text("Research with Gemini").font(.caption)
+                    Image(systemName: "chevron.right").font(.caption)
+                }
+                .frame(minHeight: 44).padding(.horizontal, 16).cloudPanel()
+            }
+            .buttonStyle(.plain).foregroundStyle(CloudTheme.cyan)
+            .padding(.horizontal, 18).padding(.vertical, 8)
         }
         .navigationTitle("Related to \(anime.name)")
         .navigationBarTitleDisplayMode(.inline)
@@ -1320,7 +1334,7 @@ private struct EpisodeAdvanceButton: View {
     let skippingFillers: Bool
     let action: () -> Void
     let playAlternate: () -> Void
-    @GestureState private var isPressing = false
+    @State private var isPressing = false
     @State private var holdProgress = 0.0
     private let holdDuration = 0.65
 
@@ -1333,48 +1347,23 @@ private struct EpisodeAdvanceButton: View {
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 4) {
-            Button(action: action) {
-                Label("Play Next", systemImage: "forward.fill")
-                    .font(.subheadline.weight(.semibold))
-                    .padding(.horizontal, 16)
-                    .frame(minHeight: 44)
-            }
-            .buttonStyle(.borderedProminent)
-            .buttonBorderShape(.capsule)
-            .tint(immediateEpisode.isFiller ? .orange : .white)
-            .foregroundStyle(.black)
-            .opacity(isPressing ? 0.7 : 1)
-            .overlay {
-                Capsule()
-                    .trim(from: 0, to: holdProgress)
-                    .stroke(.black.opacity(0.7), style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                    .padding(3)
-                    .allowsHitTesting(false)
-            }
-            .onChange(of: isPressing) { _, pressing in
-                withAnimation(pressing && !reduceMotion ? .linear(duration: holdDuration) : nil) {
-                    holdProgress = pressing ? 1 : 0
-                }
-            }
-            .highPriorityGesture(
-                LongPressGesture(minimumDuration: holdDuration)
-                    .updating($isPressing) { value, state, _ in state = value }
-                    .exclusively(before: TapGesture())
-                    .onEnded { result in
-                        switch result {
-                        case .first(true): if alternateEpisode != nil { playAlternate() }
-                        case .second: action()
-                        default: break
-                        }
+            advanceButton
+                .onChange(of: isPressing) { _, pressing in
+                    withAnimation(pressing && !reduceMotion ? .linear(duration: holdDuration) : nil) {
+                        holdProgress = pressing ? 1 : 0
                     }
-            )
-            .accessibilityHint(preferredEpisode.map { Text($0.name) } ?? Text("Only filler episodes remain"))
-            .accessibilityActions {
-                if let alternateEpisode {
-                    Button(skippingFillers ? "Play next including filler" : "Play next non-filler episode", action: playAlternate)
-                        .accessibilityHint(alternateEpisode.name)
                 }
-            }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Play Next")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { action() }
+                .accessibilityHint(preferredEpisode.map { Text($0.name) } ?? Text("Only filler episodes remain"))
+                .accessibilityActions {
+                    if let alternateEpisode {
+                        Button(skippingFillers ? "Play next including filler" : "Play next non-filler episode", action: playAlternate)
+                            .accessibilityHint(alternateEpisode.name)
+                    }
+                }
             if immediateEpisode.isFiller {
                 Text(fillerHint)
                     .font(.caption2.weight(.medium))
@@ -1384,6 +1373,109 @@ private struct EpisodeAdvanceButton: View {
             }
         }
     }
+
+    private var advanceButton: some View {
+        Label("Play Next", systemImage: "forward.fill")
+            .font(.subheadline.weight(.semibold))
+            .padding(.horizontal, 16)
+            .frame(minHeight: 44)
+            .background(immediateEpisode.isFiller ? Color.orange : .white, in: Capsule())
+            .foregroundStyle(.black)
+            .opacity(isPressing ? 0.7 : 1)
+            .overlay {
+                Capsule()
+                    .trim(from: 0, to: holdProgress)
+                    .stroke(.black.opacity(0.7), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                    .padding(3)
+                    .allowsHitTesting(false)
+            }
+            .overlay {
+                EpisodeAdvanceTouchControl(
+                    holdDuration: holdDuration,
+                    tap: action,
+                    hold: playAlternateIfAvailable,
+                    pressed: { isPressing = $0 }
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityHidden(true)
+            }
+    }
+
+    private func playAlternateIfAvailable() {
+        if alternateEpisode != nil { playAlternate() }
+    }
+}
+
+private struct EpisodeAdvanceTouchControl: UIViewRepresentable {
+    let holdDuration: TimeInterval
+    let tap: () -> Void
+    let hold: () -> Void
+    let pressed: (Bool) -> Void
+
+    func makeUIView(context: Context) -> EpisodeAdvanceControl {
+        EpisodeAdvanceControl(holdDuration: holdDuration)
+    }
+
+    func updateUIView(_ control: EpisodeAdvanceControl, context: Context) {
+        control.onTap = tap
+        control.onHold = hold
+        control.onPressChanged = pressed
+    }
+
+    static func dismantleUIView(_ control: EpisodeAdvanceControl, coordinator: ()) {
+        control.cancelPress()
+    }
+}
+
+// A single touch handler keeps taps, holds, and cancellation mutually exclusive.
+final class EpisodeAdvanceControl: UIControl {
+    var onTap: () -> Void = {}
+    var onHold: () -> Void = {}
+    var onPressChanged: (Bool) -> Void = { _ in }
+    private let holdDuration: TimeInterval
+    private var holdTask: Task<Void, Never>?
+    private var pressIsActive = false
+    private var didHold = false
+
+    init(holdDuration: TimeInterval) {
+        self.holdDuration = holdDuration
+        super.init(frame: .zero)
+        addTarget(self, action: #selector(beginPress), for: .touchDown)
+        addTarget(self, action: #selector(releasePress), for: .touchUpInside)
+        addTarget(self, action: #selector(cancelPress), for: [.touchUpOutside, .touchCancel, .touchDragExit])
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    @objc private func beginPress() {
+        cancelPress()
+        pressIsActive = true
+        didHold = false
+        onPressChanged(true)
+        holdTask = Task { @MainActor [weak self, holdDuration] in
+            try? await Task.sleep(for: .seconds(holdDuration))
+            guard !Task.isCancelled, let self, self.pressIsActive else { return }
+            self.didHold = true
+            self.onHold()
+        }
+    }
+
+    @objc private func releasePress() {
+        guard pressIsActive else { return }
+        let shouldTap = !didHold
+        cancelPress()
+        if shouldTap { onTap() }
+    }
+
+    @objc func cancelPress() {
+        holdTask?.cancel()
+        holdTask = nil
+        guard pressIsActive else { return }
+        pressIsActive = false
+        onPressChanged(false)
+    }
+
+    deinit { holdTask?.cancel() }
 }
 
 private struct NextEpisodeButton: View {

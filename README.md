@@ -25,7 +25,7 @@ A native SwiftUI client for discovering, tracking, and watching anime from the A
 - Episode-level watched state, automatic Up Next handling, replay, and all-caught-up states
 - Related series navigation for sequels and prequels
 - Optional AniList OAuth sync for library status and highest-watched-episode progress
-- Grounded catalog recommendations that only return titles available in AnimeCloud
+- Gemini-assisted watch-order research with web sources and saved, on-device watch plans
 - Arabic and English content support
 - A native SwiftUI codebase using URLSession, AVKit, Metal, SQLite, and CommonCrypto
 
@@ -107,6 +107,16 @@ Use the gauge button in the top-left corner to run the device benchmark. It test
 
 Run the benchmark on the physical iPhone or iPad you intend to use. A simulator benchmark measures the Mac's GPU and is not representative of performance on the iOS device.
 
+## Watch Plans and Gemini
+
+Open an anime, choose **Related series → Watch order**, then select first-time viewing, story chronology, or main-story viewing. **You → Gemini watch planner** accepts your personal Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey). The key stays in this device's Keychain; it is not included in the IPA or saved in preferences.
+
+Research uses Gemini 3.8 Flash with Google Search and structured output. The request sends only the selected title and related title/year metadata. It does not send your account, library, or watched history to Gemini. Google API usage is charged to your own project and follows Google's data policies. Research requires an internet connection and a project with model and search access.
+
+The app displays the original guide, source citations, and Google's search suggestions. It rejects incomplete or unsourced responses rather than substituting a made-up order. Sources do not guarantee correctness: review the guide, uncertainty, and catalog matches before saving a personal plan. The app does not bulk-generate, share, or automatically cache researched guides.
+
+**Plans** holds the guides you explicitly save, along with local completion choices. Uniquely matched titles can be opened or played; missing or ambiguous matches stay visible and block automatic continuation until you match or explicitly complete them. Optional parts can be included, and watched library titles automatically count as complete unless you choose to rewatch them. Saved progress works offline; new research requires Gemini. **Home** shows the next part of your active plan, and the weekly schedule is available from the calendar button in **Discover**.
+
 ## AniList integration
 
 1. Create an AniList API client with `animecloud://anilist-auth` as its redirect URL.
@@ -129,7 +139,7 @@ Pushing a semantic version tag such as `v1.0.0`, or manually running the release
 
 ```text
 AnimeCloud/
-├── AI/               Catalog-grounded discovery
+├── AI/               Gemini watch-order research
 ├── Components/       Shared SwiftUI components
 ├── Design/           Theme and visual system
 ├── Features/         Home, Discover, Schedule, Library, Profile, Details

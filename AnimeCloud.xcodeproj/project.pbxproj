@@ -7,8 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+        A12000000000000000000002 /* WatchPlanStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A12000000000000000000001 /* WatchPlanStore.swift */; };
 		09ACF3D4C47DF724046E24F0 /* LaunchExperienceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC10E1E0A5A321C51718CE97 /* LaunchExperienceView.swift */; };
-		121FD4A7306ABFBAFF2BBE6A /* GroundedDiscoveryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AD837FD36D33171A3C1BF87 /* GroundedDiscoveryService.swift */; };
+		121FD4A7306ABFBAFF2BBE6A /* WatchOrderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AD837FD36D33171A3C1BF87 /* WatchOrderService.swift */; };
 		1963D35D0502097929B0A39E /* AnimeCloudTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DB67BB9EB8DAF4FD1C68540 /* AnimeCloudTests.swift */; };
 		3EE7F73324406D2FD871F007 /* AnimeDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5906E360EBCFC5AF86993361 /* AnimeDetailView.swift */; };
 		42475837307BB4ACADB3B50B /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2422096CD942F6DB97F00B3A /* Models.swift */; };
@@ -22,7 +23,7 @@
 		835CC8D7DE43AE435307B2B8 /* PosterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C230C5F7B2FF684AEB02DAEF /* PosterView.swift */; };
 		89F5C0252CD63B15CF4077DB /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C302B66ADBB01005C16AB043 /* ProfileView.swift */; };
 		9640A64FB91AD72D065CAB27 /* RNCryptorPlaybackDecryptor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1670222E8A7E5CF603C0A0E /* RNCryptorPlaybackDecryptor.swift */; };
-		96419F1BF40F84C6414FEE2B /* DiscoveryAssistantView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F55B0CE206B3F38661D4C2C /* DiscoveryAssistantView.swift */; };
+		96419F1BF40F84C6414FEE2B /* WatchPlansView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F55B0CE206B3F38661D4C2C /* WatchPlansView.swift */; };
 		A06CBECDDDE20926E4BF6CC2 /* PlaybackProgressStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CF7195AF672B77A146E76DD /* PlaybackProgressStore.swift */; };
 		A63C0D95FB0E38E54FC11AB0 /* LibrarySaveMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7171E5903EE32DB865A5D2E7 /* LibrarySaveMenu.swift */; };
 		AB12AE618C343E9C6DF09647 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B729A9602F5795490F17E1F7 /* LibraryView.swift */; };
@@ -47,13 +48,14 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		0AD837FD36D33171A3C1BF87 /* GroundedDiscoveryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroundedDiscoveryService.swift; sourceTree = "<group>"; };
+        A12000000000000000000001 /* WatchPlanStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchPlanStore.swift; sourceTree = "<group>"; };
+		0AD837FD36D33171A3C1BF87 /* WatchOrderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchOrderService.swift; sourceTree = "<group>"; };
 		0DB67BB9EB8DAF4FD1C68540 /* AnimeCloudTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimeCloudTests.swift; sourceTree = "<group>"; };
 		0DE6BCD47DD2645DF72D2478 /* Anime4KVideoRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Anime4KVideoRenderer.swift; sourceTree = "<group>"; };
 		A11000000000000000000001 /* EpisodeDownloads.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpisodeDownloads.swift; sourceTree = "<group>"; };
 		23FC15825EC51D2C1601CD50 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		2422096CD942F6DB97F00B3A /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
-		3F55B0CE206B3F38661D4C2C /* DiscoveryAssistantView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryAssistantView.swift; sourceTree = "<group>"; };
+		3F55B0CE206B3F38661D4C2C /* WatchPlansView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchPlansView.swift; sourceTree = "<group>"; };
 		4279235A7B1620766FD11AFD /* CloudTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudTheme.swift; sourceTree = "<group>"; };
 		537D4BE60471483468FF3D27 /* LibraryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryStore.swift; sourceTree = "<group>"; };
 		551D83A5E1DE2489310F0230 /* ScheduleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleView.swift; sourceTree = "<group>"; };
@@ -111,7 +113,7 @@
 		27A959C2AE16C5E798CD7B0B /* AI */ = {
 			isa = PBXGroup;
 			children = (
-				0AD837FD36D33171A3C1BF87 /* GroundedDiscoveryService.swift */,
+				0AD837FD36D33171A3C1BF87 /* WatchOrderService.swift */,
 			);
 			path = AI;
 			sourceTree = "<group>";
@@ -120,7 +122,7 @@
 			isa = PBXGroup;
 			children = (
 				8531B8C59D300652FDE9567B /* DiscoverView.swift */,
-				3F55B0CE206B3F38661D4C2C /* DiscoveryAssistantView.swift */,
+				3F55B0CE206B3F38661D4C2C /* WatchPlansView.swift */,
 			);
 			path = Discover;
 			sourceTree = "<group>";
@@ -243,6 +245,7 @@
 			children = (
 				537D4BE60471483468FF3D27 /* LibraryStore.swift */,
 				7CF7195AF672B77A146E76DD /* PlaybackProgressStore.swift */,
+                A12000000000000000000001 /* WatchPlanStore.swift */,
 			);
 			path = Persistence;
 			sourceTree = "<group>";
@@ -388,8 +391,8 @@
 				E22DD67D1E46DD70B229F288 /* AppModel.swift in Sources */,
 				B6675066E24D51F9555CA7BA /* CloudTheme.swift in Sources */,
 				4A126A7B3F58B4B0C4A1FEDE /* DiscoverView.swift in Sources */,
-				96419F1BF40F84C6414FEE2B /* DiscoveryAssistantView.swift in Sources */,
-				121FD4A7306ABFBAFF2BBE6A /* GroundedDiscoveryService.swift in Sources */,
+				96419F1BF40F84C6414FEE2B /* WatchPlansView.swift in Sources */,
+				121FD4A7306ABFBAFF2BBE6A /* WatchOrderService.swift in Sources */,
 				D6350A2EA39312612B000982 /* HomeView.swift in Sources */,
 				09ACF3D4C47DF724046E24F0 /* LaunchExperienceView.swift in Sources */,
 				C48097498D9BA9498A6D62F1 /* LegacyAPI.swift in Sources */,
@@ -399,6 +402,7 @@
 				A11000000000000000000004 /* DownloadsView.swift in Sources */,
 				42475837307BB4ACADB3B50B /* Models.swift in Sources */,
 				A06CBECDDDE20926E4BF6CC2 /* PlaybackProgressStore.swift in Sources */,
+                A12000000000000000000002 /* WatchPlanStore.swift in Sources */,
 				835CC8D7DE43AE435307B2B8 /* PosterView.swift in Sources */,
 				89F5C0252CD63B15CF4077DB /* ProfileView.swift in Sources */,
 				9640A64FB91AD72D065CAB27 /* RNCryptorPlaybackDecryptor.swift in Sources */,
