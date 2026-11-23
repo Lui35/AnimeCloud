@@ -118,6 +118,8 @@ struct WatchOrderView: View {
                     if let errorMessage {
                         Text(errorMessage).foregroundStyle(CloudTheme.coral)
                         Button("Gemini settings") { showingSetup = true }.frame(minHeight: 44)
+                        Link("View Google project limits", destination: URL(string: "https://aistudio.google.com/rate-limit")!)
+                            .frame(minHeight: 44)
                     }
                     if let proposal {
                         WatchResearchView(plan: proposal)
@@ -369,7 +371,10 @@ struct GeminiSetupView: View {
             Form {
                 Section {
                     Text("Use your personal Gemini API key to research watch orders with web sources. The key is saved in this device's Keychain and is never bundled into the app.")
+                    Text("Web research uses Google Search. For Gemini 3.8 Flash, that feature requires a billing-enabled project even though text generation has a free tier.")
+                        .font(.subheadline)
                     Link("Open Google AI Studio", destination: URL(string: "https://aistudio.google.com/apikey")!)
+                    Link("Check project limits", destination: URL(string: "https://aistudio.google.com/rate-limit")!)
                     SecureField(settings.isConfigured ? "Replace API key" : "Gemini API key", text: $key)
                         .textInputAutocapitalization(.never).autocorrectionDisabled()
                     Button("Save key") {
