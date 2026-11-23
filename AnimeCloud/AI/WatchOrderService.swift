@@ -63,13 +63,16 @@ struct WatchPlan: Codable, Identifiable, Hashable, Sendable {
 }
 
 enum WatchOrderError: LocalizedError {
-    case missingKey, invalidKey, rejectedRequest, quota, invalidResponse, ungrounded, persistence, server(Int)
+    case missingKey, invalidKey, rejectedRequest, quota, quotaUnavailable, dailyQuota, rateLimited(seconds: Int), invalidResponse, ungrounded, persistence, server(Int)
     var errorDescription: String? {
         switch self {
         case .missingKey: "Add your personal Gemini API key in You → Gemini watch planner."
         case .invalidKey: "Gemini rejected this key or project access. Check the key in AI Studio and update it in Settings."
         case .rejectedRequest: "Gemini could not accept the research request. Check that your project has access to the supported model and search tools, then try again."
-        case .quota: "Gemini's quota or request limit was reached. Try later or check your Google AI Studio quota."
+        case .quota: "Google rejected the request because of a project rate limit or quota. This planner uses Google Search, which is not included in Gemini 3.8 Flash's free tier. Check your active project limits in AI Studio."
+        case .quotaUnavailable: "Google reports a quota limit of zero for this request. Waiting or creating another key in the same project will not add quota. Web research with Gemini 3.8 Flash requires a billing-enabled project."
+        case .dailyQuota: "This Google project's daily quota has been reached. Limits are shared by all keys and apps in the project. Daily request quotas reset at midnight Pacific time; check AI Studio for the exhausted limit."
+        case .rateLimited(let seconds): "Google temporarily rate-limited this project. Wait about \(seconds) seconds before trying again. Project limits are shared across API keys and apps."
         case .invalidResponse: "Gemini returned an incomplete or invalid watch order. No plan was saved. Try researching again."
         case .ungrounded: "Gemini did not return verifiable web sources. No unsourced order will be shown. Try again."
         case .persistence: "The watch planner could not save this change. Your previous saved data was kept."
@@ -123,10 +126,38 @@ actor GeminiWatchOrderService {
         case 200..<300: break
         case 400: throw WatchOrderError.rejectedRequest
         case 401, 403: throw WatchOrderError.invalidKey
-        case 429: throw WatchOrderError.quota
+        case 429: throw Self.quotaError(data, response: http)
         default: throw WatchOrderError.server(http.statusCode)
         }
         return try Self.parse(data, anime: anime, mode: mode, catalog: catalog + related + [anime])
+    }
+
+    static func quotaError(_ data: Data, response: HTTPURLResponse) -> WatchOrderError {
+        let object = data.count <= 64 * 1_024 ? (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] : nil
+        let error = object?["error"] as? [String: Any]
+        let details = error?["details"] as? [[String: Any]] ?? []
+        let violations = details.flatMap { $0["violations"] as? [[String: Any]] ?? [] }
+        let zeroQuota = violations.contains { violation in
+            if let value = violation["quotaValue"] as? String { return Double(value) == 0 }
+            if let value = violation["quotaValue"] as? NSNumber { return value.doubleValue == 0 }
+            return false
+        }
+        let message = error?["message"] as? String ?? ""
+        if zeroQuota || message.range(of: #"\blimit\s*:\s*0\b"#, options: [.regularExpression, .caseInsensitive]) != nil {
+            return .quotaUnavailable
+        }
+        if violations.contains(where: {
+            let metric = (($0["quotaId"] as? String ?? "") + " " + ($0["quotaMetric"] as? String ?? "")).lowercased()
+            return metric.contains("perday") || metric.contains("per_day")
+        }) { return .dailyQuota }
+        let delays = [response.value(forHTTPHeaderField: "Retry-After")] + details.map { $0["retryDelay"] as? String }
+        for delay in delays.compactMap({ $0 }) {
+            let value = delay.hasSuffix("s") ? String(delay.dropLast()) : delay
+            if let seconds = Double(value), seconds.isFinite, seconds >= 0, seconds <= 86_400 {
+                return .rateLimited(seconds: max(1, Int(seconds.rounded(.up))))
+            }
+        }
+        return .quota
     }
 
     static func parse(_ data: Data, anime: Anime, mode: WatchOrderMode, catalog: [Anime]) throws -> WatchPlan {

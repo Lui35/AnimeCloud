@@ -823,6 +823,29 @@ final class AnimeCloudTests: XCTestCase {
         ]])
     }
 
+    func testGeminiQuotaDistinguishesUnavailableDailyAndTemporaryLimits() throws {
+        let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/interactions")!
+        let response = HTTPURLResponse(url: url, statusCode: 429, httpVersion: nil, headerFields: nil)!
+        let zero = Data(#"{"error":{"message":"Quota exceeded","details":[{"violations":[{"quotaValue":"0"}]}]}}"#.utf8)
+        guard case .quotaUnavailable = GeminiWatchOrderService.quotaError(zero, response: response) else { return XCTFail("Zero quota is not a temporary rate limit") }
+        let daily = Data(#"{"error":{"details":[{"violations":[{"quotaId":"GenerateRequestsPerDayPerProjectPerModel-FreeTier","quotaValue":"20"}]},{"retryDelay":"2s"}]}}"#.utf8)
+        guard case .dailyQuota = GeminiWatchOrderService.quotaError(daily, response: response) else { return XCTFail("A daily cap must not suggest a two-second retry") }
+        let temporary = Data(#"{"error":{"details":[{"retryDelay":"12.4s"}]}}"#.utf8)
+        guard case .rateLimited(let seconds) = GeminiWatchOrderService.quotaError(temporary, response: response) else { return XCTFail("Expected a retry delay") }
+        XCTAssertEqual(seconds, 13)
+    }
+
+    func testGeminiQuotaHandlesMissingDetailsAndUntrustedRetryDelays() {
+        let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/interactions")!
+        let response = HTTPURLResponse(url: url, statusCode: 429, httpVersion: nil, headerFields: ["Retry-After": "10"])!
+        guard case .rateLimited(let seconds) = GeminiWatchOrderService.quotaError(Data(), response: response) else { return XCTFail("Retry-After should work without a response body") }
+        XCTAssertEqual(seconds, 10)
+        let fallback = HTTPURLResponse(url: url, statusCode: 429, httpVersion: nil, headerFields: ["Retry-After": "inf"])!
+        guard case .quota = GeminiWatchOrderService.quotaError(Data(), response: fallback) else { return XCTFail("Invalid delays should use the generic diagnostic") }
+        let zeroMessage = Data(#"{"error":{"message":"Quota exceeded for metric, limit: 0, model: gemini-3.8-flash"}}"#.utf8)
+        guard case .quotaUnavailable = GeminiWatchOrderService.quotaError(zeroMessage, response: fallback) else { return XCTFail("Zero-limit messages should explain missing quota") }
+    }
+
     @MainActor
     func testExportOrganizesEpisodesAndPreservesOriginals() async throws {
         let suite = "AnimeCloudTests.export.\(UUID())"
