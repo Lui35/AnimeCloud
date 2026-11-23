@@ -124,13 +124,8 @@ final class ChromecastPlayback: NSObject, ObservableObject, @preconcurrency GCKS
     func stopCasting() { sessions.endSessionAndStopCasting(true) }
 
     func replay() {
-        guard let client else { return }
-        completed = false
-        completedEpisodeID = nil
-        let seek = GCKMediaSeekOptions()
-        seek.interval = 0
-        client.seek(with: seek)
-        client.play()
+        // Finished receiver sessions may no longer accept seek/play; reload the episode.
+        castCurrentEpisode(startTime: 0, autoplay: true)
     }
 
     private func observeSession() {
@@ -144,12 +139,12 @@ final class ChromecastPlayback: NSObject, ObservableObject, @preconcurrency GCKS
         deviceName = sessions.currentCastSession?.device.friendlyName ?? "TV"
     }
 
-    private func castCurrentEpisode() {
+    private func castCurrentEpisode(startTime: Double? = nil, autoplay: Bool? = nil) {
         guard let episode, episode.isSupported, let client, let player, isConnected else { return }
         loadRequest?.delegate = nil
         loadRequest = nil
-        wasPlaying = player.timeControlStatus != .paused
-        let localPosition = player.currentTime().seconds
+        wasPlaying = autoplay ?? (player.timeControlStatus != .paused)
+        let localPosition = startTime ?? player.currentTime().seconds
         position = localPosition.isFinite ? max(0, localPosition) : 0
         duration = episode.duration
         completed = false

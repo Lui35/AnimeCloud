@@ -62,7 +62,7 @@ shasum -a 256 -c AnimeCloud-vX.Y.Z-unsigned.ipa.sha256
 
 Requirements:
 
-- Xcode 16 or newer
+- Xcode 26.3 or newer (required by the current Cast SDK)
 - iOS 17 or newer deployment target
 - An Apple Development team when installing directly on a physical device
 
