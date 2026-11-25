@@ -89,6 +89,14 @@ Scripts/build-unsigned-ipa.sh
 
 The resulting file is written to `Build/Unsigned/AnimeCloud-unsigned.ipa`.
 
+## Rewatch an anime
+
+Open an anime’s **… → Mark all episodes unwatched** action and confirm to clear its watched checkmarks and resume positions. Downloads are kept. A completed library entry moves to Watching Now; favorites keep their category. The action is also available in a downloaded anime. Explicit reset markers prevent old cloud/AniList progress from restoring cleared checkmarks, and linked AniList progress can be reset to zero on the next normal sync.
+
+## Choose episodes to download
+
+The download sheet offers **All episodes** and **Non-filler episodes** presets, each showing the number available. Presets apply to the current episode range and skip completed or active downloads, while allowing failed episodes to be retried. The selection count and filler count stay above the download button. Starting a download opens activity monitoring directly.
+
 ## Download activity
 
 Open **Library → Downloads → Download activity** to see preparing, downloading, failed, and ready episodes across all series. The screen updates automatically, shows a percentage when the transfer reports a known total, and displays the reason for failures. Use **Retry episode** or **Retry all failed** to restart failed downloads. The filter menu shows active, failed, or ready episodes separately. Episode options let you cancel a transfer or remove a download without removing watch history or resume positions.

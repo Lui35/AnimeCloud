@@ -39,40 +39,65 @@ struct DownloadActivityView: View {
     var body: some View {
         ZStack {
             CloudBackground()
-            if !downloads.records.values.contains(where: { filter.includes($0.status) }) {
-                EmptyCloud(
-                    title: filter == .all ? "No downloads yet" : "No \(filter.rawValue.lowercased()) downloads",
-                    detail: filter == .all ? "Choose episodes from an anime’s episode list to download them." : "Download activity updates here automatically.",
-                    systemImage: "arrow.down.circle"
-                )
-            } else {
-                List {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 16) {
+                    activityHeader
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(Filter.allCases) { option in
+                                Button { filter = option } label: {
+                                    HStack(spacing: 8) {
+                                        Text(option.rawValue)
+                                        Text("\(count(for: option))").monospacedDigit()
+                                            .foregroundStyle(filter == option ? CloudTheme.ink : CloudTheme.cyan)
+                                    }
+                                    .font(.subheadline.weight(.semibold))
+                                    .padding(.horizontal, 16).frame(minHeight: 44)
+                                    .background(filter == option ? CloudTheme.cyan : CloudTheme.panel, in: Capsule())
+                                    .foregroundStyle(filter == option ? CloudTheme.ink : .white)
+                                    .contentShape(Capsule())
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("\(option.rawValue) downloads, \(count(for: option)) episodes")
+                                .accessibilityAddTraits(filter == option ? .isSelected : [])
+                            }
+                        }
+                    }
+                    if count(for: filter) == 0 {
+                        EmptyCloud(
+                            title: filter == .all ? "No downloads yet" : "No \(filter.rawValue.lowercased()) downloads",
+                            detail: filter == .all ? "Choose episodes from an anime’s episode list to download them." : "Download activity updates here automatically.",
+                            systemImage: "arrow.down.circle"
+                        )
+                        .frame(minHeight: 260)
+                    }
                     ForEach(sections.indices, id: \.self) { index in
                         let section = sections[index]
                         let items = records(for: section.status)
                         if filter.includes(section.status), !items.isEmpty {
-                            Section("\(section.title) (\(items.count))") {
-                                ForEach(items) { record in
-                                    activityRow(record)
-                                        .listRowBackground(CloudTheme.panel)
-                                }
+                            HStack {
+                                Text(section.title).font(.title3.bold())
+                                Spacer()
+                                Text("\(items.count) episodes").font(.subheadline).foregroundStyle(CloudTheme.muted)
+                            }
+                            .padding(.top, 8)
+                            ForEach(items) { record in
+                                activityRow(record)
+                                    .padding(16).cloudPanel()
+                                    .overlay {
+                                        if record.status == .failed {
+                                            RoundedRectangle(cornerRadius: 22).stroke(CloudTheme.coral.opacity(0.5))
+                                        }
+                                    }
                             }
                         }
                     }
                 }
-                .scrollContentBackground(.hidden)
+                .padding(16)
             }
         }
         .navigationTitle("Download activity")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Picker("Show downloads", selection: $filter) {
-                    ForEach(Filter.allCases) { option in Text(option.rawValue).tag(option) }
-                }
-                .pickerStyle(.menu)
-            }
-        }
         .safeAreaInset(edge: .bottom) {
             if failedCount > 0 {
                 Button {
@@ -100,9 +125,36 @@ struct DownloadActivityView: View {
         }
     }
 
+    private func count(for filter: Filter) -> Int {
+        downloads.records.values.filter { filter.includes($0.status) }.count
+    }
+
+    private var activityHeader: some View {
+        let active = count(for: .active)
+        return HStack(alignment: .top, spacing: 14) {
+            Image(systemName: failedCount > 0 ? "exclamationmark.arrow.circlepath" : active > 0 ? "arrow.down.circle.fill" : "checkmark.circle.fill")
+                .font(.title).foregroundStyle(failedCount > 0 ? CloudTheme.coral : CloudTheme.cyan)
+                .frame(width: 52, height: 52)
+                .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(failedCount > 0 ? "\(failedCount) need attention" : active > 0 ? "\(active) in progress" : "\(count(for: .ready)) ready to watch")
+                    .font(.title2.bold())
+                Text(failedCount > 0 ? "Retry failed episodes below, or retry them all at once." : "Manage active downloads and episodes saved for offline watching.")
+                    .font(.subheadline).foregroundStyle(CloudTheme.muted)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(16).cloudPanel()
+    }
+
     private func activityRow(_ record: EpisodeDownload) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 8) {
+            HStack(alignment: .top, spacing: 12) {
+                RemoteArtwork(url: nil, fallbackFileURL: downloads.artworkURL(for: record.anime.id))
+                    .frame(width: 48, height: 68)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(record.anime.name).font(.subheadline.weight(.semibold))
                     Text(record.episode.name).font(.headline)
@@ -152,9 +204,11 @@ struct DownloadActivityView: View {
                     .font(.footnote)
                     .foregroundStyle(CloudTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(CloudTheme.coral.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
                 Button { downloads.retry(record.id) } label: {
                     Label("Retry episode", systemImage: "arrow.clockwise")
-                        .frame(minHeight: 44)
+                        .frame(maxWidth: .infinity, minHeight: 44)
                 }
                 .buttonStyle(.bordered)
                 .tint(CloudTheme.cyan)
@@ -163,9 +217,17 @@ struct DownloadActivityView: View {
                 Label("Ready to watch offline", systemImage: "checkmark.circle.fill")
                     .font(.subheadline)
                     .foregroundStyle(CloudTheme.cyan)
+                NavigationLink {
+                    DownloadedAnimeView(anime: record.anime, downloads: downloads, library: model.library, progress: model.playbackProgress)
+                } label: {
+                    Label("View episodes", systemImage: "play.circle")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.bordered).tint(CloudTheme.cyan)
             }
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 4)
         .foregroundStyle(.white)
     }
 }
