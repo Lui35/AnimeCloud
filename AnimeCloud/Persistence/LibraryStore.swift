@@ -19,6 +19,7 @@ final class LibraryStore: ObservableObject {
     private var favoriteTombstones: Set<String> = []
     private var seenTombstones: Set<String> = []
     private var episodeWatchRecords: [String: EpisodeWatchRecord] = [:]
+    private var resetWatchProgressAnimeIDs: Set<String> = []
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -33,6 +34,7 @@ final class LibraryStore: ObservableObject {
         favoriteTombstones = Set(decode([String].self, key: "library.favoriteTombstones") ?? [])
         seenTombstones = Set(decode([String].self, key: "library.seenTombstones") ?? [])
         episodeWatchRecords = decode([String: EpisodeWatchRecord].self, key: "library.episodeWatchRecords") ?? [:]
+        resetWatchProgressAnimeIDs = Set(decode([String].self, key: "library.resetWatchProgressAnimeIDs") ?? [])
     }
 
     func isFavorite(_ anime: Anime) -> Bool { category(for: anime) == .favorites }
@@ -127,11 +129,26 @@ final class LibraryStore: ObservableObject {
         episodeWatchRecords.values
             .filter { $0.animeID == animeID }
             .map(\.episodeNumber)
-            .max()
+            .max() ?? (resetWatchProgressAnimeIDs.contains(animeID) ? 0 : nil)
     }
 
     var watchedAnimeIDs: Set<String> {
-        Set(episodeWatchRecords.values.map(\.animeID))
+        Set(episodeWatchRecords.values.map(\.animeID)).union(resetWatchProgressAnimeIDs)
+    }
+
+    @discardableResult
+    func resetWatched(for anime: Anime, episodeIDs: Set<String>) -> Set<String> {
+        let ids = episodeIDs.union(episodeWatchRecords.filter { $0.value.animeID == anime.id }.keys)
+        objectWillChange.send()
+        let removed = seenEpisodeIDs.intersection(ids)
+        seenEpisodeIDs.subtract(ids)
+        seenTombstones.formUnion(ids)
+        for id in ids { episodeWatchRecords.removeValue(forKey: id) }
+        resetWatchProgressAnimeIDs.insert(anime.id)
+        if libraryCategories[anime.id] == .watched { libraryCategories[anime.id] = .watchingNow }
+        for id in removed { seenStatusChanged.send((id, false)) }
+        persistAndNotify()
+        return ids
     }
 
     /// Adds AniList's aggregate progress to the detailed local episode history.
@@ -354,6 +371,7 @@ final class LibraryStore: ObservableObject {
         defaults.set(try? encoder.encode(Array(seenEpisodeIDs)), forKey: "library.seen")
         defaults.set(try? encoder.encode(Array(seenTombstones)), forKey: "library.seenTombstones")
         defaults.set(try? encoder.encode(episodeWatchRecords), forKey: "library.episodeWatchRecords")
+        defaults.set(try? encoder.encode(Array(resetWatchProgressAnimeIDs)), forKey: "library.resetWatchProgressAnimeIDs")
         onChange?()
     }
 
@@ -374,6 +392,7 @@ final class LibraryStore: ObservableObject {
         defaults.set(try? encoder.encode(Array(favoriteTombstones)), forKey: "library.favoriteTombstones")
         defaults.set(try? encoder.encode(Array(seenTombstones)), forKey: "library.seenTombstones")
         defaults.set(try? encoder.encode(episodeWatchRecords), forKey: "library.episodeWatchRecords")
+        defaults.set(try? encoder.encode(Array(resetWatchProgressAnimeIDs)), forKey: "library.resetWatchProgressAnimeIDs")
     }
 
     private func decode<T: Decodable>(_ type: T.Type, key: String) -> T? {

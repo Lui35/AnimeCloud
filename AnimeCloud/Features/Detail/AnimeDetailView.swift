@@ -51,7 +51,8 @@ struct AnimeDetailView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 AnimePlaybackMenu(
-                    animeID: anime.id,
+                    anime: anime,
+                    library: library,
                     progress: model.playbackProgress,
                     episodeIDs: Set(detail?.episodes.map(\.id) ?? []).union(
                         model.downloads.records.values.filter { $0.anime.id == anime.id }.map(\.id)
@@ -180,22 +181,32 @@ struct AnimeDetailView: View {
 }
 
 struct AnimePlaybackMenu: View {
+    let anime: Anime
+    @ObservedObject var library: LibraryStore
     @ObservedObject var progress: PlaybackProgressStore
     let episodeIDs: Set<String>
     let isToolbarItem: Bool
     @AppStorage private var nextEpisodeLeadTime: Int
     @State private var confirmingClear = false
+    @State private var confirmingRewatch = false
     @State private var editingTiming = false
 
-    init(animeID: String, progress: PlaybackProgressStore, episodeIDs: Set<String>, isToolbarItem: Bool = false) {
+    init(anime: Anime, library: LibraryStore, progress: PlaybackProgressStore, episodeIDs: Set<String>, isToolbarItem: Bool = false) {
+        self.anime = anime
+        self.library = library
         self.progress = progress
         self.episodeIDs = episodeIDs
         self.isToolbarItem = isToolbarItem
-        _nextEpisodeLeadTime = AppStorage(wrappedValue: NextEpisodeTiming.defaultLeadTime, NextEpisodeTiming.storageKey(for: animeID))
+        _nextEpisodeLeadTime = AppStorage(wrappedValue: NextEpisodeTiming.defaultLeadTime, NextEpisodeTiming.storageKey(for: anime.id))
     }
 
     var body: some View {
         Menu {
+            Button("Mark all episodes unwatched", systemImage: "arrow.counterclockwise", role: .destructive) {
+                confirmingRewatch = true
+            }
+            .disabled(episodeIDs.isEmpty && !library.watchedAnimeIDs.contains(anime.id))
+            Divider()
             Button("Play Next Timing", systemImage: "timer") {
                 editingTiming = true
             }
@@ -237,6 +248,14 @@ struct AnimePlaybackMenu: View {
                 }
             }
             .presentationDetents([.medium, .large])
+        }
+        .confirmationDialog("Start this anime again?", isPresented: $confirmingRewatch, titleVisibility: .visible) {
+            Button("Mark all episodes unwatched", role: .destructive) {
+                let cleared = library.resetWatched(for: anime, episodeIDs: episodeIDs)
+                progress.clear(episodeIDs: cleared)
+            }
+        } message: {
+            Text("Watched checkmarks and resume positions for \(anime.name) will be cleared. Downloads are kept, and a completed library entry moves to Watching Now.")
         }
         .confirmationDialog("Clear resume positions for this anime?", isPresented: $confirmingClear, titleVisibility: .visible) {
             Button("Clear Resume Positions", role: .destructive) {

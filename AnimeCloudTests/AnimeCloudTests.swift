@@ -3,6 +3,84 @@ import UIKit
 @testable import AnimeCloud
 
 final class AnimeCloudTests: XCTestCase {
+    @MainActor
+    func testResetAnimeWatchStatePersistsAndSurvivesStaleSync() throws {
+        let suite = "AnimeCloudTests.rewatch.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let library = LibraryStore(defaults: defaults)
+        let progress = PlaybackProgressStore(defaults: defaults)
+        let anime = Anime(id: "show", name: "Series")
+        let other = Anime(id: "other", name: "Other series")
+        let first = Episode(id: "first", name: "Episode 1")
+        let tracked = Episode(id: "tracked", name: "Episode 2")
+        let unseen = Episode(id: "unseen", name: "Episode 3")
+        let unrelated = Episode(id: "other1", name: "Episode 1")
+        library.markSeen(first, anime: anime)
+        library.markSeen(tracked, anime: anime)
+        library.markSeen(unrelated, anime: other)
+        library.setCategory(.watched, for: anime)
+        progress.save(episodeID: first.id, position: 300, duration: 1200)
+        progress.save(episodeID: tracked.id, position: 400, duration: 1200)
+        progress.save(episodeID: unrelated.id, position: 500, duration: 1200)
+        let staleBackup = try library.backupData()
+        var notifications = 0
+        library.onChange = { notifications += 1 }
+        let cleared = library.resetWatched(for: anime, episodeIDs: [first.id, unseen.id])
+        progress.clear(episodeIDs: cleared)
+        XCTAssertEqual(cleared, [first.id, tracked.id, unseen.id])
+        XCTAssertEqual(notifications, 1, "Bulk reset should schedule one sync")
+        XCTAssertFalse(library.isSeen(first))
+        XCTAssertFalse(library.isSeen(tracked))
+        XCTAssertTrue(library.isSeen(unrelated))
+        XCTAssertEqual(library.category(for: anime), .watchingNow)
+        XCTAssertNil(progress.progress(for: first.id))
+        XCTAssertNil(progress.progress(for: tracked.id))
+        XCTAssertNotNil(progress.progress(for: unrelated.id))
+        let restored = LibraryStore(defaults: defaults)
+        XCTAssertEqual(restored.highestWatchedEpisode(forAnimeID: anime.id), 0, "AniList needs an explicit zero, not an omitted update")
+        XCTAssertTrue(restored.watchedAnimeIDs.contains(anime.id))
+        try restored.mergeBackup(staleBackup, catalog: [anime, other])
+        restored.mergeAniListProgress(3, anime: anime, episodes: [first, tracked, unseen])
+        XCTAssertFalse(restored.isSeen(first))
+        XCTAssertFalse(restored.isSeen(tracked))
+        XCTAssertFalse(restored.isSeen(unseen))
+        restored.markSeen(first, anime: anime)
+        XCTAssertEqual(restored.highestWatchedEpisode(forAnimeID: anime.id), 1)
+        XCTAssertEqual(LibraryStore(defaults: defaults).highestWatchedEpisode(forAnimeID: anime.id), 1)
+    }
+
+    @MainActor
+    func testRewatchKeepsFavoriteCategory() {
+        let suite = "AnimeCloudTests.rewatchFavorite.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let library = LibraryStore(defaults: defaults)
+        let anime = Anime(id: "favorite", name: "Favorite")
+        library.setCategory(.favorites, for: anime)
+        library.resetWatched(for: anime, episodeIDs: ["1"])
+        XCTAssertEqual(library.category(for: anime), .favorites)
+    }
+
+    func testNonFillerDownloadSelectionSkipsActiveAndReadyButIncludesFailures() {
+        let anime = Anime(id: "show", name: "Series")
+        let episodes = [
+            Episode(id: "canon", name: "Episode 1"),
+            Episode(id: "filler", name: "Episode 2", filer: "1"),
+            Episode(id: "failed", name: "Episode 3"),
+            Episode(id: "ready", name: "Episode 4"),
+            Episode(id: "active", name: "Episode 5"),
+            Episode(id: "preparing", name: "Episode 6")
+        ]
+        let records = Dictionary(uniqueKeysWithValues: zip(episodes.dropFirst(2), [EpisodeDownload.Status.failed, .ready, .downloading, .preparing]).map {
+            ($0.0.id, EpisodeDownload(anime: anime, episode: $0.0, catalogPosition: 0, finalCanonEpisode: nil, status: $0.1))
+        })
+        XCTAssertEqual(DownloadEpisodeSelection.eligibleIDs(in: episodes, records: records), ["canon", "filler", "failed"])
+        XCTAssertEqual(DownloadEpisodeSelection.eligibleIDs(in: episodes, records: records, excludingFillers: true), ["canon", "failed"])
+        XCTAssertEqual(DownloadEpisodeSelection.eligibleIDs(in: Array(episodes[1...3]), records: records, excludingFillers: true), ["failed"], "A range must not select episodes outside it")
+        XCTAssertTrue(DownloadEpisodeSelection.eligibleIDs(in: [], records: records, excludingFillers: true).isEmpty)
+    }
+
     func testDownloadProgressHandlesUnknownTotalsAndOverruns() {
         let progress = Progress(totalUnitCount: 100)
         progress.completedUnitCount = 37

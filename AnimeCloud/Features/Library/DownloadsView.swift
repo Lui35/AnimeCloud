@@ -1,6 +1,14 @@
 import SwiftUI
 import UIKit
 
+enum DownloadEpisodeSelection {
+    static func eligibleIDs(in episodes: [Episode], records: [String: EpisodeDownload], excludingFillers: Bool = false) -> Set<String> {
+        Set(episodes.filter {
+            (!excludingFillers || !$0.isFiller) && (records[$0.id] == nil || records[$0.id]?.status == .failed)
+        }.map(\.id))
+    }
+}
+
 struct DownloadSelectionView: View {
     private enum RangeField { case from, to }
 
@@ -11,6 +19,7 @@ struct DownloadSelectionView: View {
     let catalog: [Episode]
     @State private var watchedEpisodeIDs: Set<String> = []
     @State private var selected: Set<String> = []
+    @State private var showingActivity = false
     @State private var fromEpisode = ""
     @State private var toEpisode = ""
     @State private var episodeRange: ClosedRange<Int>?
@@ -20,98 +29,151 @@ struct DownloadSelectionView: View {
         NavigationStack {
             ZStack {
                 CloudBackground()
-                List {
-                    HStack(spacing: 14) {
-                        RemoteArtwork(url: anime.imageURL)
-                            .frame(width: 56, height: 72)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                            .accessibilityHidden(true)
-                        Text(anime.name).font(.headline)
-                    }
-                    .listRowBackground(CloudTheme.panel)
-                    rangeFilter
-                        .listRowBackground(CloudTheme.panel)
-                    if !selectableVisibleIDs.isEmpty {
-                        bulkSelection
-                            .listRowBackground(CloudTheme.panel)
-                    }
-                    if visibleEpisodes.isEmpty {
-                        Text("No episodes in this range.")
-                            .foregroundStyle(CloudTheme.muted)
-                            .listRowBackground(CloudTheme.panel)
-                    }
-                    ForEach(visibleEpisodes) { episode in
-                        let status = downloads.records[episode.id]?.status
-                        let selectable = canSelect(episode)
-                        let isWatched = watchedEpisodeIDs.contains(episode.id)
-                        Button {
-                            if selected.remove(episode.id) == nil { selected.insert(episode.id) }
-                        } label: {
-                            HStack(spacing: 12) {
-                                Text(episode.name)
-                                Spacer()
-                                HStack(spacing: 8) {
-                                    Image(systemName: "sparkles")
-                                        .foregroundStyle(.orange)
-                                        .opacity(episode.isFiller ? 1 : 0)
-                                    Image(systemName: "eye.fill")
-                                        .foregroundStyle(CloudTheme.cyan)
-                                        .opacity(isWatched ? 1 : 0)
-                                }
-                                .font(.caption.weight(.semibold))
-                                .accessibilityHidden(true)
-                                if selectable {
-                                    Image(systemName: selected.contains(episode.id) ? "checkmark.circle.fill" : "circle")
-                                        .foregroundStyle(CloudTheme.cyan)
-                                } else {
-                                    Text(status == .ready ? "Downloaded" : "Queued")
-                                        .font(.caption)
-                                        .foregroundStyle(CloudTheme.muted)
-                                }
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 16) {
+                        selectionHeader
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Quick selection").font(.headline)
+                            Text(episodeRange == nil ? "Choose all available episodes or skip the fillers." : "Selections apply to the current episode range.")
+                                .font(.subheadline).foregroundStyle(CloudTheme.muted)
+                            ViewThatFits(in: .horizontal) {
+                                HStack(spacing: 10) { selectionPresets }
+                                VStack(spacing: 10) { selectionPresets }
                             }
-                            .frame(minHeight: 44)
-                            .contentShape(Rectangle())
+                            if !selected.isEmpty {
+                                Button { selected.removeAll() } label: {
+                                    Label("Clear selection", systemImage: "minus.circle").frame(minHeight: 44)
+                                }
+                                .buttonStyle(.borderless)
+                            }
                         }
-                        .buttonStyle(.plain)
-                        .disabled(!selectable)
-                        .accessibilityLabel(episode.name)
-                        .accessibilityValue(downloadRowStatus(episode, isWatched: isWatched, status: status))
-                        .accessibilityAddTraits(selected.contains(episode.id) ? .isSelected : [])
-                        .listRowBackground(CloudTheme.panel)
+                        .padding(16).cloudPanel()
+                        rangeFilter.padding(16).cloudPanel()
+                        HStack {
+                            Text("Episodes").font(.title3.bold())
+                            Spacer()
+                            Text("\(visibleEpisodes.count) in view").font(.subheadline).foregroundStyle(CloudTheme.muted)
+                        }
+                        if visibleEpisodes.isEmpty {
+                            Text("No episodes in this range.").foregroundStyle(CloudTheme.muted).padding(16)
+                        }
+                        ForEach(visibleEpisodes) { episode in selectionRow(episode) }
                     }
+                    .padding(16)
                 }
-                .scrollContentBackground(.hidden)
                 .scrollDismissesKeyboard(.interactively)
             }
-            .navigationTitle("Select episodes")
+            .navigationTitle("Download episodes")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } }
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink { DownloadActivityView(downloads: downloads) } label: {
+                        Label("Download activity", systemImage: "list.bullet.rectangle")
+                    }
+                }
             }
             .safeAreaInset(edge: .bottom) {
-                Button {
-                    downloads.enqueue(anime: anime, catalog: catalog, selected: selected)
-                    dismiss()
-                } label: {
-                    Label(downloadButtonTitle,
-                          systemImage: "arrow.down.circle")
-                        .frame(maxWidth: .infinity)
+                VStack(spacing: 10) {
+                    Text("\(selected.count) selected · \(selectedFillerCount) filler")
+                        .font(.subheadline.weight(.semibold)).foregroundStyle(CloudTheme.muted)
+                    Button {
+                        downloads.enqueue(anime: anime, catalog: catalog, selected: selected)
+                        selected.removeAll()
+                        showingActivity = true
+                    } label: {
+                        Label(downloadButtonTitle, systemImage: "arrow.down.circle.fill")
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(PrimaryCapsuleStyle())
+                    .disabled(selected.isEmpty)
+                    .opacity(selected.isEmpty ? 0.5 : 1)
                 }
-                .buttonStyle(PrimaryCapsuleStyle())
-                .disabled(selected.isEmpty)
-                .opacity(selected.isEmpty ? 0.5 : 1)
-                .padding()
-                .background(.regularMaterial)
+                .padding().background(.regularMaterial)
+            }
+            .navigationDestination(isPresented: $showingActivity) {
+                DownloadActivityView(downloads: downloads)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+                    }
             }
         }
         .onAppear { watchedEpisodeIDs = library.seenEpisodeIDs }
         .onReceive(library.seenStatusChanged) { change in
-            if change.isSeen {
-                watchedEpisodeIDs.insert(change.episodeID)
-            } else {
-                watchedEpisodeIDs.remove(change.episodeID)
-            }
+            if change.isSeen { watchedEpisodeIDs.insert(change.episodeID) }
+            else { watchedEpisodeIDs.remove(change.episodeID) }
         }
+        .onReceive(downloads.$records) { records in
+            selected.formIntersection(DownloadEpisodeSelection.eligibleIDs(in: catalog, records: records))
+        }
+        .onChange(of: episodeRange) { _, _ in selected.formIntersection(Set(visibleEpisodes.map(\.id))) }
+    }
+
+    private var selectionHeader: some View {
+        HStack(alignment: .top, spacing: 16) {
+            RemoteArtwork(url: anime.imageURL)
+                .frame(width: 72, height: 100)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(anime.name).font(.headline)
+                Text("\(catalog.count) episodes").font(.subheadline).foregroundStyle(CloudTheme.muted)
+                Text("\(selectableVisibleIDs.count) available to download")
+                    .font(.subheadline.weight(.semibold)).foregroundStyle(CloudTheme.cyan)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(16).cloudPanel()
+    }
+
+    @ViewBuilder private var selectionPresets: some View {
+        presetButton("All episodes", detail: "\(selectableVisibleIDs.count) available", icon: "checkmark.circle", ids: selectableVisibleIDs)
+        presetButton("Non-filler episodes", detail: "\(nonFillerIDs.count) available", icon: "line.3.horizontal.decrease.circle", ids: nonFillerIDs)
+    }
+
+    private func presetButton(_ title: String, detail: String, icon: String, ids: Set<String>) -> some View {
+        Button { selected = ids } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                Label(title, systemImage: icon).font(.subheadline.weight(.semibold))
+                Text(detail).font(.caption).foregroundStyle(CloudTheme.muted)
+            }
+            .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
+            .padding(12)
+            .background(selected == ids && !ids.isEmpty ? CloudTheme.violet.opacity(0.25) : Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
+            .overlay { RoundedRectangle(cornerRadius: 14).stroke(selected == ids && !ids.isEmpty ? CloudTheme.cyan : Color.white.opacity(0.12)) }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain).disabled(ids.isEmpty)
+        .accessibilityAddTraits(selected == ids && !ids.isEmpty ? .isSelected : [])
+    }
+
+    private func selectionRow(_ episode: Episode) -> some View {
+        let status = downloads.records[episode.id]?.status
+        let selectable = canSelect(episode)
+        let watched = watchedEpisodeIDs.contains(episode.id)
+        return Button {
+            if selected.remove(episode.id) == nil { selected.insert(episode.id) }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: selectable ? (selected.contains(episode.id) ? "checkmark.circle.fill" : "circle") : (status == .ready ? "checkmark.circle.fill" : "arrow.down.circle"))
+                    .font(.title2).foregroundStyle(CloudTheme.cyan).accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(episode.name).font(.subheadline.weight(.semibold))
+                    HStack(spacing: 10) {
+                        if episode.isFiller { Label("Filler", systemImage: "sparkles").foregroundStyle(.orange) }
+                        if watched { Label("Watched", systemImage: "eye.fill").foregroundStyle(CloudTheme.muted) }
+                        if !selectable { Text(status == .ready ? "Downloaded" : "In download activity").foregroundStyle(CloudTheme.cyan) }
+                    }
+                    .font(.caption)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(16).frame(minHeight: 60).cloudPanel().contentShape(Rectangle())
+        }
+        .buttonStyle(.plain).disabled(!selectable)
+        .accessibilityLabel(episode.name)
+        .accessibilityValue(downloadRowStatus(episode, isWatched: watched, status: status))
+        .accessibilityAddTraits(selected.contains(episode.id) ? .isSelected : [])
     }
 
     private func downloadRowStatus(_ episode: Episode, isWatched: Bool, status: EpisodeDownload.Status?) -> String {
@@ -163,28 +225,14 @@ struct DownloadSelectionView: View {
     }
 
     private var selectableVisibleIDs: Set<String> {
-        Set(visibleEpisodes.filter(canSelect).map(\.id))
+        DownloadEpisodeSelection.eligibleIDs(in: visibleEpisodes, records: downloads.records)
     }
 
-    private var bulkSelection: some View {
-        let ids = selectableVisibleIDs
-        let allSelected = ids.isSubset(of: selected)
-        let action = allSelected ? "Deselect all" : "Select all"
-        let title = episodeRange == nil ? action : "\(action) in range"
-        return Button {
-            if allSelected {
-                selected.subtract(ids)
-            } else {
-                selected.formUnion(ids)
-            }
-        } label: {
-            Label(title, systemImage: allSelected ? "minus.circle" : "checkmark.circle")
-                .foregroundStyle(CloudTheme.cyan)
-                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
+    private var nonFillerIDs: Set<String> {
+        DownloadEpisodeSelection.eligibleIDs(in: visibleEpisodes, records: downloads.records, excludingFillers: true)
     }
+
+    private var selectedFillerCount: Int { catalog.filter { selected.contains($0.id) && $0.isFiller }.count }
 
     private var inputRange: ClosedRange<Int>? {
         guard let lower = episodeNumber(fromEpisode), let upper = episodeNumber(toEpisode), lower <= upper else { return nil }
@@ -323,7 +371,7 @@ struct DownloadsView: View {
     }
 }
 
-private struct DownloadedAnimeView: View {
+struct DownloadedAnimeView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var navigationVisibility = ScrollAwareNavigationVisibility()
@@ -428,7 +476,7 @@ private struct DownloadedAnimeView: View {
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                AnimePlaybackMenu(animeID: anime.id, progress: progress, episodeIDs: Set(records.map(\.id)), isToolbarItem: true)
+                AnimePlaybackMenu(anime: anime, library: library, progress: progress, episodeIDs: Set(records.map(\.id)), isToolbarItem: true)
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Export all", systemImage: "square.and.arrow.up") {
