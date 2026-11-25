@@ -238,6 +238,26 @@ struct DownloadsView: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
+                        NavigationLink {
+                            DownloadActivityView(downloads: downloads)
+                        } label: {
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 5) {
+                                    Label("Download activity", systemImage: "list.bullet.rectangle")
+                                        .font(.headline)
+                                    Text(activitySummary)
+                                        .font(.subheadline)
+                                        .foregroundStyle(CloudTheme.muted)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right").accessibilityHidden(true)
+                            }
+                            .foregroundStyle(CloudTheme.cyan)
+                            .padding(16)
+                            .frame(minHeight: 44)
+                            .cloudPanel()
+                        }
+                        .buttonStyle(.plain)
                         if model.hasPendingCloudChanges { DownloadSyncStatus() }
                         SectionHeading(title: "On this device")
                         PosterGrid {
@@ -271,6 +291,13 @@ struct DownloadsView: View {
         .navigationTitle("Downloads")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink {
+                    DownloadActivityView(downloads: downloads)
+                } label: {
+                    Label("Download activity", systemImage: "list.bullet.rectangle")
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 Button("Export all", systemImage: "square.and.arrow.up") {
                     exportRequest = EpisodeExportRequest(episodeIDs: groups.flatMap { group in
                         group.records.sorted { $0.catalogPosition < $1.catalogPosition }
@@ -285,6 +312,14 @@ struct DownloadsView: View {
         }
         .task { await model.retryPendingWatchSync() }
         .refreshable { await model.retryPendingWatchSync() }
+    }
+
+    private var activitySummary: String {
+        let records = Array(downloads.records.values)
+        let active = records.filter { $0.status == .preparing || $0.status == .downloading }.count
+        let failed = records.filter { $0.status == .failed }.count
+        let ready = records.filter { $0.status == .ready }.count
+        return "\(active) active · \(failed) failed · \(ready) ready"
     }
 }
 

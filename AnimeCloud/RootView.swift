@@ -3,7 +3,6 @@ import SwiftUI
 struct RootView: View {
     @EnvironmentObject private var model: AppModel
     @State private var selectedTab = 0
-    @State private var castControlsActive = false
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -14,12 +13,6 @@ struct RootView: View {
             LibraryView(store: model.library, isActive: selectedTab == 3)
                 .tag(3).tabItem { Label("Library", systemImage: "rectangle.stack.fill") }
             ProfileView().tag(4).tabItem { Label("You", systemImage: "person.crop.circle") }
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            ChromecastMiniController(isActive: $castControlsActive)
-                .frame(height: castControlsActive ? 64 : 0)
-                .clipped()
-                .accessibilityHidden(!castControlsActive)
         }
         .tint(CloudTheme.cyan)
         .alert(item: $model.message) { message in

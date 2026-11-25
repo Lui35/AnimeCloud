@@ -18,10 +18,10 @@
 		5FA8106BDD5197935E4A4183 /* AniListService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7469F355B89BCAD15B234389 /* AniListService.swift */; };
 		62535061A530AFAC99182D61 /* AnimeCloudApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8017B8CE5B3DF8BE3075471A /* AnimeCloudApp.swift */; };
 		66AD20915157D35F5F6BADAA /* Anime4KVideoRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DE6BCD47DD2645DF72D2478 /* Anime4KVideoRenderer.swift */; };
-		6ABFFDF32BA3F3ABBE4A35FC /* ChromecastPlayback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30801FFED9ED028DDF15C341 /* ChromecastPlayback.swift */; };
 		7F6C4D930A6F9BD89E1F62CE /* ScheduleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 551D83A5E1DE2489310F0230 /* ScheduleView.swift */; };
 		835CC8D7DE43AE435307B2B8 /* PosterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C230C5F7B2FF684AEB02DAEF /* PosterView.swift */; };
 		89F5C0252CD63B15CF4077DB /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C302B66ADBB01005C16AB043 /* ProfileView.swift */; };
+		9536CF0E8079E86E450B9DD7 /* DownloadActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E6E861D0BC13449D8F16C04 /* DownloadActivityView.swift */; };
 		9640A64FB91AD72D065CAB27 /* RNCryptorPlaybackDecryptor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1670222E8A7E5CF603C0A0E /* RNCryptorPlaybackDecryptor.swift */; };
 		A06CBECDDDE20926E4BF6CC2 /* PlaybackProgressStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CF7195AF672B77A146E76DD /* PlaybackProgressStore.swift */; };
 		A63C0D95FB0E38E54FC11AB0 /* LibrarySaveMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7171E5903EE32DB865A5D2E7 /* LibrarySaveMenu.swift */; };
@@ -34,9 +34,8 @@
 		C8451D952A75920202F9E9F0 /* DownloadsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E2BF2B2475DA27CB73D4A9F /* DownloadsView.swift */; };
 		C996D966B7D107F61FB958B5 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A37F37836E5A0D68FC629906 /* RootView.swift */; };
 		D6350A2EA39312612B000982 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 568D760F6FE9B42DF3E658CE /* HomeView.swift */; };
-		DF7C309D81C992A4B2F6886F /* Anime4KMetal in Frameworks */ = {isa = PBXBuildFile; productRef = BFF720257B4DC9EFE9592605 /* Anime4KMetal */; };
 		E22DD67D1E46DD70B229F288 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A62F0B570C69CF141C369ED0 /* AppModel.swift */; };
-		F8B2839F6E6D8DA944E3EC13 /* GoogleCastStatic in Frameworks */ = {isa = PBXBuildFile; productRef = 3244E4BCCB1A8C2C511481EC /* GoogleCastStatic */; };
+		F8B2839F6E6D8DA944E3EC13 /* Anime4KMetal in Frameworks */ = {isa = PBXBuildFile; productRef = BFF720257B4DC9EFE9592605 /* Anime4KMetal */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -55,7 +54,7 @@
 		11D269F0748F849B85245188 /* WatchPlanStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchPlanStore.swift; sourceTree = "<group>"; };
 		23FC15825EC51D2C1601CD50 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		2422096CD942F6DB97F00B3A /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
-		30801FFED9ED028DDF15C341 /* ChromecastPlayback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromecastPlayback.swift; sourceTree = "<group>"; };
+		3E6E861D0BC13449D8F16C04 /* DownloadActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadActivityView.swift; sourceTree = "<group>"; };
 		4279235A7B1620766FD11AFD /* CloudTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudTheme.swift; sourceTree = "<group>"; };
 		537D4BE60471483468FF3D27 /* LibraryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryStore.swift; sourceTree = "<group>"; };
 		551D83A5E1DE2489310F0230 /* ScheduleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleView.swift; sourceTree = "<group>"; };
@@ -90,8 +89,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F8B2839F6E6D8DA944E3EC13 /* GoogleCastStatic in Frameworks */,
-				DF7C309D81C992A4B2F6886F /* Anime4KMetal in Frameworks */,
+				F8B2839F6E6D8DA944E3EC13 /* Anime4KMetal in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -176,6 +174,7 @@
 		91D7D9125C91620FF551D99D /* Library */ = {
 			isa = PBXGroup;
 			children = (
+				3E6E861D0BC13449D8F16C04 /* DownloadActivityView.swift */,
 				9E2BF2B2475DA27CB73D4A9F /* DownloadsView.swift */,
 				B729A9602F5795490F17E1F7 /* LibraryView.swift */,
 			);
@@ -271,7 +270,6 @@
 			isa = PBXGroup;
 			children = (
 				0DE6BCD47DD2645DF72D2478 /* Anime4KVideoRenderer.swift */,
-				30801FFED9ED028DDF15C341 /* ChromecastPlayback.swift */,
 				CDD11B80AC2DB8CC72EA032A /* CryptoBridge.h */,
 				6B4A6DBA6F90562EF9725114 /* EpisodeDownloads.swift */,
 				F1670222E8A7E5CF603C0A0E /* RNCryptorPlaybackDecryptor.swift */,
@@ -317,7 +315,6 @@
 				09BC186FEA1B04E53946485D /* Sources */,
 				E92BAD650B33C53126443BFB /* Resources */,
 				6B00AF54AD1E38B15847E12F /* Frameworks */,
-				A724E6A254B50A2A1F965C2F /* Copy Google Cast resources */,
 			);
 			buildRules = (
 			);
@@ -325,7 +322,6 @@
 			);
 			name = AnimeCloud;
 			packageProductDependencies = (
-				3244E4BCCB1A8C2C511481EC /* GoogleCastStatic */,
 				BFF720257B4DC9EFE9592605 /* Anime4KMetal */,
 			);
 			productName = AnimeCloud;
@@ -361,7 +357,6 @@
 			mainGroup = 9CE447DE11DAA8C14C760634;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				23ED483BA60FEA08518D450A /* XCRemoteSwiftPackageReference "google-cast-ios-sdk" */,
 				3F605447E29B545F5EEA51D5 /* XCLocalSwiftPackageReference "ThirdParty/anime4k-metal" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -386,28 +381,6 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
-/* Begin PBXShellScriptBuildPhase section */
-		A724E6A254B50A2A1F965C2F /* Copy Google Cast resources */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			name = "Copy Google Cast resources";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "#!/bin/bash\nset -euo pipefail\n\n# SPM links Google's static SDK but does not copy its UI bundles into the app.\n# Copy resources from the exact framework slice selected by Xcode for this build.\ncast_framework=\"${BUILT_PRODUCTS_DIR}/GoogleCast.framework\"\napp_resources=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\ntest -d \"${cast_framework}/GoogleCastUIResources.bundle\"\nfor resource_bundle in \"${cast_framework}\"/*.bundle; do\n    ditto \"${resource_bundle}\" \"${app_resources}/$(basename \"${resource_bundle}\")\"\ndone\n# Keep the SDK privacy manifest with its own resource bundle.\ncp \"${cast_framework}/PrivacyInfo.xcprivacy\" \"${app_resources}/GoogleCastCoreResources.bundle/PrivacyInfo.xcprivacy\"\n";
-		};
-/* End PBXShellScriptBuildPhase section */
-
 /* Begin PBXSourcesBuildPhase section */
 		09BC186FEA1B04E53946485D /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -418,9 +391,9 @@
 				62535061A530AFAC99182D61 /* AnimeCloudApp.swift in Sources */,
 				3EE7F73324406D2FD871F007 /* AnimeDetailView.swift in Sources */,
 				E22DD67D1E46DD70B229F288 /* AppModel.swift in Sources */,
-				6ABFFDF32BA3F3ABBE4A35FC /* ChromecastPlayback.swift in Sources */,
 				B6675066E24D51F9555CA7BA /* CloudTheme.swift in Sources */,
 				4A126A7B3F58B4B0C4A1FEDE /* DiscoverView.swift in Sources */,
+				9536CF0E8079E86E450B9DD7 /* DownloadActivityView.swift in Sources */,
 				C8451D952A75920202F9E9F0 /* DownloadsView.swift in Sources */,
 				136BDFFB33DD83B5690245E4 /* EpisodeDownloads.swift in Sources */,
 				D6350A2EA39312612B000982 /* HomeView.swift in Sources */,
@@ -513,10 +486,6 @@
 				MARKETING_VERSION = 1.0.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
-				OTHER_LDFLAGS = (
-					"-ObjC",
-					"-lc++",
-				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -554,7 +523,6 @@
 					"@executable_path/Frameworks",
 				);
 				OTHER_LDFLAGS = (
-					"$(inherited)",
 					"-lsqlite3",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.animecloud.reborn;
@@ -625,10 +593,6 @@
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
-				OTHER_LDFLAGS = (
-					"-ObjC",
-					"-lc++",
-				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
@@ -666,7 +630,6 @@
 					"@executable_path/Frameworks",
 				);
 				OTHER_LDFLAGS = (
-					"$(inherited)",
 					"-lsqlite3",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.animecloud.reborn;
@@ -717,23 +680,7 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		23ED483BA60FEA08518D450A /* XCRemoteSwiftPackageReference "google-cast-ios-sdk" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/googlecast/google-cast-ios-sdk";
-			requirement = {
-				kind = exactVersion;
-				version = 4.8.6;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
 /* Begin XCSwiftPackageProductDependency section */
-		3244E4BCCB1A8C2C511481EC /* GoogleCastStatic */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 23ED483BA60FEA08518D450A /* XCRemoteSwiftPackageReference "google-cast-ios-sdk" */;
-			productName = GoogleCastStatic;
-		};
 		BFF720257B4DC9EFE9592605 /* Anime4KMetal */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = Anime4KMetal;

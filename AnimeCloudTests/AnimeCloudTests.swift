@@ -1,56 +1,61 @@
 import XCTest
 import UIKit
-import GoogleCast
 @testable import AnimeCloud
 
 final class AnimeCloudTests: XCTestCase {
-    func testCastMediaPreservesEpisodeIdentityAndStreamMetadata() {
-        let episode = Episode(id: "ep1", name: "Episode 1")
-        let item = CastEpisode(anime: Anime(id: "show1", name: "Test Series"), episode: episode,
-                               url: URL(string: "https://example.com/video.M3U8?token=test")!, duration: 1440)
-        let media = item.mediaInformation()
-        XCTAssertTrue(item.isSupported)
-        XCTAssertEqual(media.contentURL, item.url)
-        XCTAssertEqual(media.contentType, "application/x-mpegURL")
-        XCTAssertEqual(media.streamDuration, 1440)
-        XCTAssertEqual(media.metadata?.string(forKey: kGCKMetadataKeyTitle), "Test Series")
-        XCTAssertEqual(media.metadata?.string(forKey: kGCKMetadataKeySubtitle), "Episode 1")
-        XCTAssertTrue(item.matches(media))
-        XCTAssertFalse(item.matches(nil))
-        let different = CastEpisode(anime: Anime(id: "show2", name: "Different Series"), episode: episode,
-                                    url: item.url, duration: 1440)
-        XCTAssertFalse(different.matches(media), "A TV update for another anime must not overwrite this episode's progress")
-    }
-
-    func testCastRejectsDeviceOnlySourcesAndHandlesUnknownDuration() {
-        for source in ["file:///private/download.mp4", "http://", "data:video/mp4;base64,AAAA", "ftp://example.com/video.mp4"] {
-            let item = CastEpisode(anime: Anime(id: "show1", name: "Test"), episode: Episode(id: "1", name: "1"),
-                                   url: URL(string: source)!, duration: .nan)
-            XCTAssertFalse(item.isSupported, source)
-            XCTAssertEqual(item.mediaInformation().streamDuration, 0)
-        }
-        for (path, type) in [("video.mp4", "video/mp4"), ("video.mpd", "application/dash+xml"), ("video.webm", "video/webm")] {
-            let item = CastEpisode(anime: Anime(id: "show1", name: "Test"), episode: Episode(id: "1", name: "1"),
-                                   url: URL(string: "https://example.com/\(path)")!, duration: -10)
-            XCTAssertEqual(item.mediaInformation().contentType, type)
-            XCTAssertEqual(item.mediaInformation().streamDuration, 0)
-        }
+    func testDownloadProgressHandlesUnknownTotalsAndOverruns() {
+        let progress = Progress(totalUnitCount: 100)
+        progress.completedUnitCount = 37
+        XCTAssertEqual(EpisodeDownloads.fraction(for: progress), 0.37)
+        progress.completedUnitCount = 120
+        XCTAssertEqual(EpisodeDownloads.fraction(for: progress), 1)
+        progress.totalUnitCount = 0
+        XCTAssertNil(EpisodeDownloads.fraction(for: progress))
+        progress.totalUnitCount = -1
+        XCTAssertNil(EpisodeDownloads.fraction(for: progress))
     }
 
     @MainActor
-    func testCastDelegateSelectorsAndBundledUIResources() {
-        let cast = ChromecastPlayback.shared
-        for selector in ["sessionManager:didStartSession:", "sessionManager:didResumeSession:",
-                         "sessionManager:didEndSession:withError:", "sessionManager:didSuspendSession:withReason:",
-                         "request:didAbortWithReason:", "remoteMediaClient:didUpdateMediaStatus:"] {
-            XCTAssertTrue(cast.responds(to: NSSelectorFromString(selector)), selector)
+    func testRetryAllFailedOnlyRestartsFailuresAndPersistsNewTransfers() throws {
+        let suite = "AnimeCloudTests.retryDownloads.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        let directory = URL.temporaryDirectory.appending(path: suite)
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+            try? FileManager.default.removeItem(at: directory)
         }
-        let resources = Bundle(for: GCKUICastButton.self)
-        XCTAssertNotNil(resources.url(forResource: "GoogleCastUIResources", withExtension: "bundle"),
-                        "The SDK integration must include the picker/controller resources")
-        let bonjour = Bundle.main.object(forInfoDictionaryKey: "NSBonjourServices") as? [String]
-        XCTAssertTrue(bonjour?.contains("_CC1AD845._googlecast._tcp") == true)
-        XCTAssertNotNil(Bundle.main.object(forInfoDictionaryKey: "NSLocalNetworkUsageDescription"))
+        let anime = Anime(id: "anime", name: "Series")
+        let records = [EpisodeDownload.Status.failed, .failed, .ready, .preparing, .downloading].enumerated().map { index, status in
+            EpisodeDownload(anime: anime, episode: Episode(id: String(index), name: "Episode \(index)"),
+                            catalogPosition: index, finalCanonEpisode: nil, status: status,
+                            failure: status == .failed ? "Connection lost" : nil)
+        }
+        let original = Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0) })
+        defaults.set(try JSONEncoder().encode(original), forKey: "downloads.episodes")
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [DownloadRetryFixtureProtocol.self]
+        let api = LegacyAPI(session: URLSession(configuration: configuration))
+        let downloads = EpisodeDownloads(api: api, defaults: defaults, directory: directory)
+        defer { for id in ["0", "1"] { try? downloads.remove(id) } }
+
+        downloads.retryAllFailed()
+        let firstRetryIDs = downloads.records.mapValues(\.transferID)
+        for record in records {
+            let current = try XCTUnwrap(downloads.records[record.id])
+            if record.status == .failed {
+                XCTAssertNotEqual(current.transferID, record.transferID)
+                XCTAssertEqual(current.status, .preparing)
+                XCTAssertNil(current.failure)
+            } else {
+                XCTAssertEqual(current.transferID, record.transferID)
+                XCTAssertEqual(current.status, record.status)
+            }
+        }
+        downloads.retryAllFailed()
+        downloads.retry("0")
+        XCTAssertEqual(downloads.records.mapValues(\.transferID), firstRetryIDs, "Repeated retry must not duplicate active transfers")
+        let restored = EpisodeDownloads(api: api, defaults: defaults, directory: directory)
+        XCTAssertEqual(restored.records.mapValues(\.transferID), firstRetryIDs)
     }
 
     @MainActor
@@ -1284,6 +1289,15 @@ private final class WatchResearchFixtureProtocol: URLProtocol {
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Self.responseBody)
         client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
+private final class DownloadRetryFixtureProtocol: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
     }
     override func stopLoading() {}
 }

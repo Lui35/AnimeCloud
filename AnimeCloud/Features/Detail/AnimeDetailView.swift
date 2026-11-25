@@ -597,8 +597,6 @@ struct PlayerSheet: View {
     @State private var isFullscreen = false
     @StateObject private var anime4KBenchmark = Anime4KBenchmarkController()
     @StateObject private var pictureInPicture = PlaybackPictureInPicture()
-    @ObservedObject private var cast = ChromecastPlayback.shared
-    @State private var playbackURL: URL?
     @AppStorage("playback.skipFillerEpisodes") private var skipFillerEpisodes = true
     @AppStorage("playback.anime4k.mode") private var anime4KModeRawValue = Anime4KPlaybackMode.off.rawValue
     @AppStorage private var nextEpisodeLeadTime: Int
@@ -624,9 +622,7 @@ struct PlayerSheet: View {
         NavigationStack {
             ZStack {
                 Color.black.ignoresSafeArea()
-                if isCastingEpisode {
-                    ChromecastPlayerPanel(cast: cast)
-                } else if let player, !anime4KBenchmark.isRunning {
+                if let player, !anime4KBenchmark.isRunning {
                     if !isFullscreen {
                         ZStack(alignment: .bottom) {
                             PlaybackSurface(player: player, mode: anime4KMode, pictureInPicture: pictureInPicture)
@@ -688,17 +684,7 @@ struct PlayerSheet: View {
                 }
             }
             .overlay(alignment: .bottom) {
-                if showingUpNext {
-                    upNextPanel.transition(.move(edge: .bottom).combined(with: .opacity))
-                } else if isCastingEpisode, let immediateNextEpisode,
-                          NextEpisodeTiming.isNearEnd(position: cast.position, duration: cast.duration, leadTime: nextEpisodeLeadTime) {
-                    EpisodeAdvanceButton(
-                        immediateEpisode: immediateNextEpisode, preferredEpisode: nextEpisode,
-                        alternateEpisode: alternateNextEpisode, skippingFillers: skipFillerEpisodes,
-                        action: playNextEpisode, playAlternate: playAlternateNextEpisode
-                    )
-                    .padding(16)
-                }
+                if showingUpNext { upNextPanel.transition(.move(edge: .bottom).combined(with: .opacity)) }
             }
             .navigationTitle(episode.name)
             .navigationBarTitleDisplayMode(.inline)
@@ -708,17 +694,11 @@ struct PlayerSheet: View {
                         .labelStyle(.iconOnly)
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
-                    if isCastingEpisode {
-                        ChromecastButton().frame(width: 44, height: 44)
-                    } else if player != nil, !isFullscreen {
-                        Menu {
-                            Anime4KModeMenu(mode: anime4KMode, selectMode: selectAnime4KMode)
-                            Button("Run Device Benchmark", systemImage: "gauge.with.dots.needle.67percent", action: runAnime4KBenchmark)
-                        } label: {
-                            Label("Video settings", systemImage: "slider.horizontal.3")
-                        }
-                        .labelStyle(.iconOnly)
-                        PlaybackOutputControls(pictureInPicture: pictureInPicture, isEnhanced: anime4KMode.preset != nil, canCast: playbackURL?.isFileURL == false)
+                    if player != nil, !isFullscreen {
+                        Button("Run Device Benchmark", systemImage: "gauge.with.dots.needle.67percent", action: runAnime4KBenchmark)
+                            .labelStyle(.iconOnly)
+                        Anime4KModeMenu(mode: anime4KMode, selectMode: selectAnime4KMode)
+                        PlaybackOutputControls(pictureInPicture: pictureInPicture, isEnhanced: anime4KMode.preset != nil)
                         Button("Enter full screen", systemImage: "arrow.up.left.and.arrow.down.right") { isFullscreen = true }
                             .labelStyle(.iconOnly)
                     }
@@ -742,20 +722,6 @@ struct PlayerSheet: View {
             guard player == nil else { return }
             await preparePlayback(requestID: retryToken)
         }
-        .onChange(of: cast.isCasting) { _, casting in
-            if casting { pictureInPicture.stop(); isFullscreen = false }
-            updateDisplaySleep()
-        }
-        .onChange(of: cast.completedEpisodeID) { _, completedID in
-            guard completedID == "\(anime.id):\(episode.id)" else { return }
-            showingUpNext = true
-        }
-        .alert("Casting unavailable", isPresented: Binding(
-            get: { cast.errorMessage != nil },
-            set: { if !$0 { cast.errorMessage = nil } }
-        )) {
-            Button("OK") { cast.errorMessage = nil }
-        } message: { Text(cast.errorMessage ?? "") }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
             displaySleep.update(isPlaybackActive: false, isAppActive: false)
         }
@@ -787,10 +753,6 @@ struct PlayerSheet: View {
                 retry: { retryToken = UUID() }
             )
         }
-    }
-
-    private var isCastingEpisode: Bool {
-        (cast.isCasting || cast.isLoading) && cast.currentEpisodeID == "\(anime.id):\(episode.id)"
     }
 
     private var anime4KMode: Anime4KPlaybackMode {
@@ -833,7 +795,6 @@ struct PlayerSheet: View {
                 url = try await model.api.playback(epID: episode.id, quality: "1").url
             }
             guard requestIsCurrent(requestID) else { return }
-            playbackURL = url
             let asset = AVURLAsset(url: url)
             async let loadedDuration = try? asset.load(.duration)
             guard try await asset.load(.isPlayable) else { throw PlaybackPresentationError.notPlayable }
@@ -864,16 +825,6 @@ struct PlayerSheet: View {
                 return
             }
             newPlayer.play()
-            let playingEpisode = episode
-            let statusEpisodes = episodesForWatchStatus
-            cast.attach(player: newPlayer, episode: CastEpisode(anime: anime, episode: playingEpisode, url: url, duration: assetDuration)) {
-                [progressStore, library, anime] position, duration in
-                progressStore.save(episodeID: playingEpisode.id, position: position, duration: duration)
-                library.recordPlayback(of: playingEpisode, anime: anime, episodes: statusEpisodes, position: position, duration: duration)
-            } onComplete: { [progressStore, library, anime] in
-                progressStore.clear(episodeID: playingEpisode.id)
-                library.completePlayback(of: playingEpisode, anime: anime, episodes: statusEpisodes)
-            }
         } catch is CancellationError {
             return
         } catch {
@@ -952,9 +903,7 @@ struct PlayerSheet: View {
     private func replayEpisode() {
         progressStore.clear(episodeID: episode.id)
         showingUpNext = false
-        if isCastingEpisode {
-            cast.replay()
-        } else if let player {
+        if let player {
             Task {
                 await player.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero)
                 player.play()
@@ -1017,7 +966,7 @@ struct PlayerSheet: View {
             let duration = player.currentItem?.duration.seconds ?? 0
             let position = time.seconds
             Task { @MainActor in
-                guard isPlayerVisible, self.player === player, !showingUpNext, !isCastingEpisode else { return }
+                guard isPlayerVisible, self.player === player, !showingUpNext else { return }
                 progressStore.save(episodeID: observedEpisode.id, position: position, duration: duration)
                 library.recordPlayback(of: observedEpisode, anime: anime, episodes: episodesForWatchStatus, position: position, duration: duration)
             }
@@ -1030,11 +979,10 @@ struct PlayerSheet: View {
         if let player {
             let duration = player.currentItem?.duration.seconds ?? 0
             let position = player.currentTime().seconds
-            if !showingUpNext, !isCastingEpisode {
+            if !showingUpNext {
                 progressStore.save(episodeID: episode.id, position: position, duration: duration)
                 library.recordPlayback(of: episode, anime: anime, episodes: episodesForWatchStatus, position: position, duration: duration)
             }
-            cast.detach(player: player)
             if let timeObserver { player.removeTimeObserver(timeObserver) }
             player.pause()
             player.replaceCurrentItem(with: nil)
@@ -1052,7 +1000,7 @@ struct PlayerSheet: View {
 
     private func updateDisplaySleep() {
         displaySleep.update(
-            isPlaybackActive: isPlayerVisible && player != nil && player?.timeControlStatus != .paused && !isCastingEpisode,
+            isPlaybackActive: isPlayerVisible && player != nil && player?.timeControlStatus != .paused,
             isAppActive: UIApplication.shared.applicationState == .active
         )
     }
@@ -1087,7 +1035,6 @@ private struct FullscreenPlaybackView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var player: AVPlayer?
     @Binding var modeRawValue: String
-    @ObservedObject private var cast = ChromecastPlayback.shared
     @ObservedObject var benchmark: Anime4KBenchmarkController
     let pictureInPicture: PlaybackPictureInPicture
     @Binding var isPresented: Bool
@@ -1116,14 +1063,12 @@ private struct FullscreenPlaybackView: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             Color.black.ignoresSafeArea()
-            if cast.isLoading || cast.isCasting {
-                ChromecastPlayerPanel(cast: cast)
-            } else if let player, !benchmark.isRunning {
+            if let player, !benchmark.isRunning {
                 PlaybackSurface(player: player, mode: mode, pictureInPicture: pictureInPicture)
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
             }
-            if !benchmark.isRunning && benchmark.report == nil && !cast.isLoading && !cast.isCasting {
+            if !benchmark.isRunning && benchmark.report == nil {
                 GeometryReader { geometry in
                     Color.clear
                         .contentShape(Rectangle())
@@ -1216,7 +1161,7 @@ private struct FullscreenPlaybackView: View {
                     .shadow(color: .black, radius: 4)
 
                     HStack(spacing: 6) {
-                        PlaybackOutputControls(pictureInPicture: pictureInPicture, isEnhanced: mode.preset != nil, canCast: (player.currentItem?.asset as? AVURLAsset)?.url.isFileURL == false)
+                        PlaybackOutputControls(pictureInPicture: pictureInPicture, isEnhanced: mode.preset != nil)
                         Anime4KModeMenu(mode: mode, selectMode: selectMode)
                         Button { isPresented = false } label: {
                             Image(systemName: "arrow.down.right.and.arrow.up.left")
