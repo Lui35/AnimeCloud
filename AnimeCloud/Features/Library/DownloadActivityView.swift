@@ -152,11 +152,13 @@ struct DownloadActivityView: View {
                     .font(.footnote)
                     .foregroundStyle(CloudTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
-                Button("Retry episode", systemImage: "arrow.clockwise") { downloads.retry(record.id) }
-                    .buttonStyle(.bordered)
-                    .tint(CloudTheme.cyan)
-                    .frame(minHeight: 44)
-                    .accessibilityLabel("Retry \(record.anime.name), \(record.episode.name)")
+                Button { downloads.retry(record.id) } label: {
+                    Label("Retry episode", systemImage: "arrow.clockwise")
+                        .frame(minHeight: 44)
+                }
+                .buttonStyle(.bordered)
+                .tint(CloudTheme.cyan)
+                .accessibilityLabel("Retry \(record.anime.name), \(record.episode.name)")
             case .ready:
                 Label("Ready to watch offline", systemImage: "checkmark.circle.fill")
                     .font(.subheadline)
