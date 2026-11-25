@@ -42,11 +42,6 @@ struct AnimeCloudApp: App {
 }
 
 final class DownloadAppDelegate: NSObject, UIApplicationDelegate {
-    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
-        _ = ChromecastPlayback.shared
-        return true
-    }
-
     func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String,
                      completionHandler: @escaping () -> Void) {
         AppModel.live.downloads.handleBackgroundEvents(identifier: identifier, completion: completionHandler)

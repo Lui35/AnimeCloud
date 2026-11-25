@@ -54,13 +54,6 @@
     </array>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>Choose a profile picture for your Anime Cloud account.</string>
-    <key>NSLocalNetworkUsageDescription</key>
-    <string>Find Chromecast and Google Cast TVs on your Wi-Fi network to play episodes on your TV.</string>
-    <key>NSBonjourServices</key>
-    <array>
-        <string>_googlecast._tcp</string>
-        <string>_CC1AD845._googlecast._tcp</string>
-    </array>
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSAllowsArbitraryLoadsForMedia</key>

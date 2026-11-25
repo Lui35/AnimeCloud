@@ -11,13 +11,7 @@ settings:
     CODE_SIGN_STYLE: Automatic
     CURRENT_PROJECT_VERSION: 1
     MARKETING_VERSION: 1.0.0
-    OTHER_LDFLAGS:
-      - "-ObjC"
-      - "-lc++"
 packages:
-  GoogleCast:
-    url: https://github.com/googlecast/google-cast-ios-sdk
-    exactVersion: 4.8.6
   Anime4KMetal:
     path: ThirdParty/anime4k-metal
 targets:
@@ -27,8 +21,6 @@ targets:
     sources:
       - path: AnimeCloud
     dependencies:
-      - package: GoogleCast
-        product: GoogleCastStatic
       - package: Anime4KMetal
         product: Anime4KMetal
     settings:
@@ -41,12 +33,7 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_OBJC_BRIDGING_HEADER: AnimeCloud/Infrastructure/CryptoBridge.h
         OTHER_LDFLAGS:
-          - "$(inherited)"
           - "-lsqlite3"
-    postBuildScripts:
-      - name: Copy Google Cast resources
-        path: Scripts/copy-cast-resources.sh
-        basedOnDependencyAnalysis: false
     scheme:
       testTargets:
         - AnimeCloudTests

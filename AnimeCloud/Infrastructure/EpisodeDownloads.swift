@@ -113,6 +113,17 @@ final class EpisodeDownloads: NSObject, ObservableObject {
         start(record)
     }
 
+    func retryAllFailed() {
+        let failedIDs = records.values.filter { $0.status == .failed }.map(\.id)
+        for id in failedIDs { retry(id) }
+    }
+
+    nonisolated static func fraction(for progress: Progress) -> Double? {
+        guard progress.totalUnitCount > 0, progress.fractionCompleted.isFinite,
+              progress.fractionCompleted >= 0 else { return nil }
+        return min(progress.fractionCompleted, 1)
+    }
+
     func remove(_ episodeID: String) throws {
         guard let record = records[episodeID] else { return }
         try deleteMedia(for: record)
@@ -290,7 +301,7 @@ final class EpisodeDownloads: NSObject, ObservableObject {
 
     private func observe(_ task: URLSessionTask, for record: EpisodeDownload) {
         observations[record.transferID] = task.progress.observe(\.fractionCompleted, options: [.initial, .new]) { [weak self] value, _ in
-            let fraction = value.fractionCompleted
+            let fraction = Self.fraction(for: value)
             Task { @MainActor in
                 guard let self, self.records[record.id]?.transferID == record.transferID,
                       self.records[record.id]?.status == .downloading else { return }

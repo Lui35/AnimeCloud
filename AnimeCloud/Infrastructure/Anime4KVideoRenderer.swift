@@ -675,10 +675,8 @@ final class PlaybackPictureInPicture: NSObject, ObservableObject, AVPictureInPic
 struct PlaybackOutputControls: View {
     @ObservedObject var pictureInPicture: PlaybackPictureInPicture
     let isEnhanced: Bool
-    var canCast = false
 
     var body: some View {
-        if canCast { ChromecastButton().frame(width: 44, height: 44) }
         AirPlayPicker().frame(width: 44, height: 44)
         if !isEnhanced && pictureInPicture.isAvailable {
             Button(action: pictureInPicture.start) {
